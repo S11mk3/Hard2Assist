@@ -1,81 +1,79 @@
-#importing libriaries that are needed
-import speech_recognition as sr
-import importlib
-import os
+"""Hard2Assist -- listen for "computer <something>" and do it."""
+
 import pyfiglet
+import speech_recognition as sr
 
-#defining variables
-recognizer = sr.Recognizer()
-prefix = "computer"
-commands = {}
+import registry
+
+PREFIX = "computer"
+
+# How long to wait for you to start talking, and how long a single command can
+# run. Without these, listen() blocks forever and the program looks frozen.
+LISTEN_TIMEOUT = 5
+PHRASE_LIMIT = 8
 
 
-#COMMAND HANDLER
-for subfolder in ["TextCommands", "SystemApps"]:
-    folder_path = os.path.join(os.path.dirname(__file__), "commands", subfolder)
-    for file in os.listdir(folder_path):
-        if file.endswith(".py") and file != "__init__.py":
-            module_name = file[:-3]
+def handle(commands, text):
+    """Deal with one recognised sentence. Returns registry.STOP to quit."""
+    spoken = text.lower().strip()
+
+    # The wake word has to start the sentence, otherwise "I bought a computer
+    # yesterday" would set things off.
+    if not spoken.startswith(PREFIX):
+        return None
+
+    utterance = spoken[len(PREFIX):].strip(" ,.")
+    if not utterance:
+        return None
+
+    print("Command:", utterance)
+    return registry.dispatch(commands, utterance)
+
+
+def main():
+    print(pyfiglet.figlet_format("Hard2Assist"))
+
+    commands = registry.load()
+    if not commands:
+        print("No commands were loaded, so there is nothing to do.")
+        return
+    print("Commands:", ", ".join(sorted(commands)))
+
+    recognizer = sr.Recognizer()
+
+    with sr.Microphone() as source:
+        print("Calibrating for background noise, hold on...")
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+
+        print(f"Listening. Say '{PREFIX} help' for what I can do, "
+              f"'{PREFIX} stop' to quit.\n")
+
+        while True:
             try:
-                module = importlib.import_module(f"commands.{subfolder}.{module_name}")
-                commands[module_name.lower()] = module.run
+                audio = recognizer.listen(
+                    source,
+                    timeout=LISTEN_TIMEOUT,
+                    phrase_time_limit=PHRASE_LIMIT,
+                )
+                text = recognizer.recognize_google(audio)
+                print("Heard:", text)
+
+                if handle(commands, text) is registry.STOP:
+                    break
+
+            except sr.WaitTimeoutError:
+                continue  # nobody said anything, just keep listening
+            except sr.UnknownValueError:
+                print("I didn't catch that.")
+            except sr.RequestError as e:
+                print(f"Could not reach the speech service: {e}")
             except Exception as e:
-                print(f"Error loading {module_name}: {e}")
-
-print("Loaded commands:", list(commands.keys()))
-
+                # One bad command should not end the session.
+                print(f"Something went wrong: {e}")
 
 
-start_text = pyfiglet.figlet_format("Hard2Assist")
-print(start_text)
-
-
-
-#MAIN FUNCTION
-with sr.Microphone() as source:
-    print("Listening to your commands...")
-
-    while True:
-        try:
-            audio = recognizer.listen(source)
-
-            if audio == True:
-                pass
-            
-
-            text = recognizer.recognize_google(audio)
-
-            print("Heard:", text)
-
-            if prefix.lower() in text.lower():
-
-                after_prefix = text.lower().split(prefix.lower(), 1)[1].strip()
-
-                print("HEARD PREFIX")
-                print("Command:", after_prefix)
-
-                found = False
-
-                for command, action in commands.items():
-
-                    if command in after_prefix:
-                        if command in ["open", "kill", "close"]:
-                            app_name = after_prefix.split(command, 1)[1].strip()
-                            action(app_name)
-                        else:
-                            action()
-                        found = True
-                        break
-
-                if not found:
-                    print("Unknown command")
-
-        except sr.UnknownValueError:
-            print("I didnt understand you")
-        
-        except sr.RequestError as e:
-            print("Error:", e)
-
-        except KeyboardInterrupt:
-            print("Exiting")
-            break
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nExiting.")
