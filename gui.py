@@ -9,7 +9,9 @@ thread, and the microphone loop would otherwise be calling straight into it.
 """
 
 import math
+import os
 import queue
+import sys
 import threading
 import tkinter as tk
 
@@ -22,6 +24,7 @@ import theme
 WINDOW_SIZE = "520x460"
 HINT_CLEAR_MS = 4000
 PULSE_MS = 50
+ICON = "H2A.ico"
 
 DEFAULT_HINT = 'say "computer help" to hear what I can do'
 
@@ -78,6 +81,7 @@ class App:
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(420, 380)
         self.root.configure(bg=theme.BG)
+        self._set_icon()
 
         tk.Label(
             self.root, text="H A R D 2 A S S I S T", font=theme.TITLE_FONT,
@@ -121,6 +125,24 @@ class App:
         self.log_box.tag_configure("normal", foreground=theme.TEXT)
         self.log_box.tag_configure("warn", foreground=theme.WARN)
         self.log_box.tag_configure("dim", foreground=theme.DIM)
+
+    def _set_icon(self):
+        """Title bar and taskbar icon.
+
+        The .exe already carries the icon as a file, but a running window has
+        its own, so it has to be set here too. Inside the bundle the file lives
+        in PyInstaller's unpacked folder.
+        """
+        base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(base, ICON)
+
+        if not os.path.isfile(path):
+            return  # not worth failing over; you just get the default icon
+
+        try:
+            self.root.iconbitmap(path)
+        except tk.TclError:
+            pass
 
     # -- the pulse ------------------------------------------------------------
 

@@ -13,11 +13,19 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+ICON = "H2A.ico"
+
 OPTIONS = [
     "--onefile",              # one .exe rather than a folder of files
     "--windowed",             # no console window behind the app
     "--name", "Hard2Assist",
     "--noconfirm",
+
+    # The .exe file icon...
+    "--icon", ICON,
+    # ...and a copy inside the bundle, because the running window sets its own
+    # title bar and taskbar icon from the file at runtime.
+    "--add-data", f"{ICON}{os.pathsep}.",
 
     # The commands/ folder is found by scanning at runtime, so PyInstaller
     # cannot see those imports and would leave them out. Ship the folder as
@@ -37,6 +45,10 @@ OPTIONS = [
 def main():
     if shutil.which("pyinstaller") is None:
         print("PyInstaller is not installed. Run: pip install pyinstaller")
+        return 1
+
+    if not os.path.isfile(os.path.join(HERE, ICON)):
+        print(f"{ICON} is missing -- the .exe would get the default icon.")
         return 1
 
     for stale in ("build", "dist"):
