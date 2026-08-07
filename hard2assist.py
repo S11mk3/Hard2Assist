@@ -39,8 +39,7 @@ def run_selftest():
     note(f"commands found: {sorted(commands) or 'NONE'}")
 
     for module_name in ("apps", "win", "psutil", "speech_recognition",
-                        "pyttsx3", "pyttsx3.drivers.sapi5", "comtypes",
-                        "pycaw.utils"):
+                        "comtypes", "comtypes.client", "pycaw.utils"):
         try:
             __import__(module_name)
             note(f"import {module_name:<24}: ok")
@@ -49,22 +48,28 @@ def run_selftest():
 
     # A build with no voice starts perfectly happily and is simply mute, so it
     # has to be checked rather than noticed.
-    # Actually say something. Building the engine can succeed in a bundle that
-    # then cannot make a sound, so "it started" is not proof of anything.
+    # Say several things, not one. Speaking once has never been the problem --
+    # the failure was speaking the first line and then going silent for the
+    # rest of the session, with no error raised. Only repetition catches that.
     speaks = False
     if speech.start():
-        speech.speak("Hard2Assist self test.")
-        deadline = time.time() + 20
-        while time.time() < deadline and not speech.spoken_count():
+        wanted = 3
+        for i in range(wanted):
+            speech.speak(f"Self test, line {i + 1}.")
+
+        deadline = time.time() + 40
+        while time.time() < deadline and speech.spoken_count() < wanted:
             if speech.error():
                 break
             time.sleep(0.2)
-        speaks = speech.spoken_count() > 0
+        speaks = speech.spoken_count() >= wanted
 
     if speaks:
-        note("speech                          : ok (said a test phrase)")
+        note(f"speech                          : ok "
+             f"({speech.spoken_count()} phrases actually spoken)")
     elif speech.available():
-        note(f"speech                          : ENGINE STARTED BUT SILENT "
+        note(f"speech                          : STARTED BUT ONLY SPOKE "
+             f"{speech.spoken_count()} of 3 "
              f"-- {speech.error() or 'no error reported'}")
     else:
         note(f"speech                          : NOT AVAILABLE -- {speech.error()}")

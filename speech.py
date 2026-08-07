@@ -1,29 +1,38 @@
 """Saying things out loud.
 
-One thread owns the voice, and it is the only thread that ever touches the
-engine. pyttsx3.init() hands back the same cached engine every time it is
-called, so creating one anywhere else -- even briefly, to check speech works --
-gives that thread a half-used engine that then stops responding.
+Windows' own speech API (SAPI) is driven directly here. pyttsx3 was the obvious
+choice and it does not work for this: it speaks the first thing you ask for and
+then quietly does nothing, returning in a tenth of a second without an error and
+without a sound. Measured on this machine -- 1.69s for the first phrase, then
+0.13s, 0.12s, 0.15s for the rest. SAPI.SpVoice.Speak is synchronous and has no
+run loop to get stuck in, so it just works.
 
-While it is talking the microphone is paused, otherwise Hard2Assist hears
+One thread owns the voice, because COM objects belong to the thread that made
+them. While it is talking the microphone is paused, otherwise Hard2Assist hears
 "Closing one window", picks the word "close" out of it, and sets off again.
 """
 
 import queue
 import threading
+import time
 
 _queue = queue.Queue()
 _thread = None
 _ready = threading.Event()
 _available = False
 _enabled = True
-
-_pause_mic = None
-_resume_mic = None
 _error = ""
 _spoken = []
 
+_pause_mic = None
+_resume_mic = None
+
 START_TIMEOUT = 15
+
+# Speak() does not return until it has finished talking, so anything real takes
+# noticeable time. A call that comes back faster than this said nothing, which
+# is a failure that reports itself no other way.
+REAL_SPEECH_SECONDS = 0.15
 
 
 def on_speaking(pause, resume):
@@ -40,7 +49,6 @@ def start():
         _thread = threading.Thread(target=_run, daemon=True)
         _thread.start()
 
-    # The thread reports back whether it managed to build an engine.
     _ready.wait(timeout=START_TIMEOUT)
     return _available
 
@@ -50,7 +58,7 @@ def available():
 
 
 def error():
-    """Why speech is unavailable. Empty when it is fine."""
+    """Why speech is not working. Empty when it is fine."""
     return _error
 
 
@@ -73,12 +81,16 @@ def stop():
 
 
 def idle():
-    """True when there is nothing left to say. Used by the tests."""
+    """True when there is nothing left to say."""
     return _queue.empty()
 
 
 def spoken_count():
-    """How many lines have actually made it out of the speaker."""
+    """How many lines actually came out of the speaker.
+
+    Only counts the ones that took long enough to have really been spoken, so
+    this is evidence rather than a hopeful tally.
+    """
     return len(_spoken)
 
 
@@ -92,45 +104,9 @@ def _safely(hook):
         pass
 
 
-def _say_with(engine, text):
-    """Say one line, rebuilding the engine if it has stopped working.
-
-    pyttsx3 engines go bad -- an interrupted runAndWait() leaves the driver
-    thinking its loop is still running, and every later call fails. Left alone
-    that means the app speaks once and is mute for the rest of the session, so
-    a failure gets one fresh engine and one retry rather than being terminal.
-    """
-    try:
-        engine.say(text)
-        engine.runAndWait()
-        return engine
-    except Exception:
-        pass
-
-    try:
-        engine.stop()
-    except Exception:
-        pass
-
-    fresh = _new_engine()
-    fresh.say(text)
-    fresh.runAndWait()
-    return fresh
-
-
-def _new_engine():
-    """A genuinely new engine.
-
-    pyttsx3.init() hands back a cached one, which would just be the broken
-    engine again, so build it directly and fall back to init() only if that
-    class ever moves.
-    """
-    try:
-        from pyttsx3.engine import Engine
-        return Engine(None, False)
-    except Exception:
-        import pyttsx3
-        return pyttsx3.init()
+def _new_voice():
+    import comtypes.client
+    return comtypes.client.CreateObject("SAPI.SpVoice")
 
 
 def _run():
@@ -139,21 +115,11 @@ def _run():
     try:
         # COM has to be switched on for each thread that uses it. comtypes does
         # that when it is first imported -- but if anything else imported it
-        # first, on another thread, the import here is a no-op and the voice
+        # first, on another thread, the import here is a no-op and everything
         # fails with "CoInitialize has not been called". So ask explicitly.
         import comtypes
         comtypes.CoInitialize()
-
-        # comtypes normally writes generated COM wrappers into its own package
-        # folder. Inside the built .exe that is a temporary unpacked copy, so
-        # building them in memory instead avoids writing there at all.
-        import comtypes.client
-        comtypes.client.gen_dir = None
-    except Exception:
-        pass
-
-    try:
-        engine = _new_engine()
+        voice = _new_voice()
     except Exception as e:
         _available = False
         _error = f"{type(e).__name__}: {e}"
@@ -175,12 +141,10 @@ def _run():
             _safely(_pause_mic)
 
         try:
-            engine = _say_with(engine, text)
-            _spoken.append(text)
+            voice = _speak_once(voice, text)
         except Exception as e:
             # A broken voice must never take the app down, but it must not be
-            # invisible either -- a bundle that creates the engine and then
-            # fails to speak would otherwise look like it is working.
+            # invisible either.
             _error = f"{type(e).__name__}: {e}"
         finally:
             # Only start listening again once there is nothing left to say, so
@@ -192,16 +156,34 @@ def _run():
                 speaking = False
                 _safely(_resume_mic)
 
-    if speaking and _resume_mic:
-        _resume_mic()
-
-    try:
-        engine.stop()
-    except Exception:
-        pass
+    _safely(_resume_mic)
 
     try:
         import comtypes
         comtypes.CoUninitialize()
     except Exception:
         pass
+
+
+def _speak_once(voice, text):
+    """Say one line. Returns the voice to use next time.
+
+    If a call returns too fast to have made a sound, the voice object is
+    replaced and the line tried once more, rather than the app going silently
+    mute for the rest of the session.
+    """
+    start = time.time()
+    voice.Speak(text)
+    took = time.time() - start
+
+    if took >= REAL_SPEECH_SECONDS:
+        _spoken.append(text)
+        return voice
+
+    fresh = _new_voice()
+    start = time.time()
+    fresh.Speak(text)
+    if time.time() - start >= REAL_SPEECH_SECONDS:
+        _spoken.append(text)
+
+    return fresh
