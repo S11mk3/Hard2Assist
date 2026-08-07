@@ -14,11 +14,14 @@ import queue
 import sys
 import threading
 import tkinter as tk
+from tkinter import filedialog
 
 import apps
+import ask
 import listener
 import output
 import registry
+import speech
 import theme
 
 WINDOW_SIZE = "520x460"
@@ -54,12 +57,19 @@ class App:
         # Anything a command say()s now lands in our log instead of a console.
         output.on_message(self.log_from_any_thread)
 
+        # When a command meets a program it has never heard of, it needs a path,
+        # and you cannot say a path out loud. This is where the picker comes in.
+        ask.on_request(self.ask_for_program)
+
         self.commands = registry.load()
         if self.commands:
             # Something in the log from the start, so the panel does not look
             # broken before you have said anything.
+            tally = apps.counts()
             self.log(f"Ready. {len(self.commands)} commands, "
-                     f"{len(apps.names())} apps.", tag="dim")
+                     f"{sum(tally.values())} apps "
+                     f"({tally.get('installed', 0)} found on this PC).",
+                     tag="dim")
         else:
             self.log("No commands were found, so there is nothing to do.")
 
@@ -67,6 +77,16 @@ class App:
             on_command=self.run_command,
             on_status=self.status_from_any_thread,
         )
+
+        # Talking into its own microphone would make it hear "Closing one
+        # window" and act on the word "close", so it stops listening while it
+        # speaks.
+        if speech.start():
+            speech.on_speaking(self.listener.pause, self.listener.resume)
+        else:
+            self.log("No voice available on this PC -- replies will be "
+                     "written only.", tag="dim")
+
         self.mic_thread = threading.Thread(target=self.listener.run, daemon=True)
         self.mic_thread.start()
 
@@ -254,8 +274,36 @@ class App:
         if result is registry.STOP:
             self.root.after(0, self.quit)
 
+    def ask_for_program(self, name):
+        """Open the file picker and wait for an answer.
+
+        Called from the microphone thread, but tkinter dialogs only work on the
+        thread running the window, so the request is handed over with after()
+        and this side waits for the result.
+        """
+        answer = {}
+        done = threading.Event()
+
+        def show():
+            try:
+                answer["path"] = filedialog.askopenfilename(
+                    parent=self.root,
+                    title=f"Where is {name}?",
+                    filetypes=[("Programs", "*.exe;*.lnk"), ("All files", "*.*")],
+                )
+            finally:
+                done.set()
+
+        self.root.after(0, show)
+
+        # A timeout, so a dialog left open does not wedge the command thread
+        # for the rest of the session.
+        done.wait(timeout=180)
+        return answer.get("path") or None
+
     def quit(self):
         self.listener.stop()
+        speech.stop()
         # Drop anything logged from here on. The widgets are going away, and in
         # the built .exe there is no console to fall back to.
         output.on_message(lambda _text: None)

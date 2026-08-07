@@ -39,6 +39,16 @@ OPTIONS = [
     "--hidden-import", "apps",
     "--hidden-import", "win",
     "--hidden-import", "psutil",
+    "--hidden-import", "speech",
+
+    # pyttsx3 picks its driver by name at runtime, so PyInstaller never sees
+    # this import. Without it the .exe runs perfectly and is simply mute.
+    "--hidden-import", "pyttsx3.drivers",
+    "--hidden-import", "pyttsx3.drivers.sapi5",
+    "--hidden-import", "comtypes",
+    "--hidden-import", "comtypes.stream",
+    "--hidden-import", "comtypes.client",
+    "--hidden-import", "comtypes.gen",
 ]
 
 

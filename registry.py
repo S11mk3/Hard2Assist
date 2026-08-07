@@ -5,12 +5,14 @@ A command module is any .py file under commands/<group>/ that defines:
     NAME      -- the word the user says
     TAKES_ARG -- True if the rest of the sentence is passed to run()
     HELP      -- one line shown by `help`
+    ALIASES   -- optional; other words the recogniser produces for this one
     run()     -- run(arg) if TAKES_ARG else run()
 
 Nothing about a command is written down anywhere else, so adding one means
 dropping a file in the folder.
 """
 
+import difflib
 import glob
 import importlib.util
 import os
@@ -37,6 +39,7 @@ def _roots():
 
 
 _loaded = None
+_aliases = {}
 
 
 def load():
@@ -72,7 +75,46 @@ def load():
             commands[name] = module
 
     _loaded = commands
+    _build_aliases(commands)
     return commands
+
+
+def _build_aliases(commands):
+    """Map every alias a command declares onto that command.
+
+    "close" is the one that really needs this -- Google's recogniser hears the
+    ordinary English word "clothes" almost every time.
+    """
+    global _aliases
+    _aliases = {}
+
+    for name, module in commands.items():
+        for alias in getattr(module, "ALIASES", ()):
+            alias = alias.lower()
+            if alias not in commands:      # a real command always wins
+                _aliases.setdefault(alias, name)
+
+
+def resolve(commands, word):
+    """Work out which command a spoken word meant.
+
+    Returns (name, corrected_from) where corrected_from is set if we had to
+    interpret. Never guesses silently -- being told "I took 'cloze' as 'close'"
+    is far better than wondering why the wrong thing happened.
+    """
+    word = word.lower()
+
+    if word in commands:
+        return word, None
+
+    if word in _aliases:
+        return _aliases[word], word
+
+    close = difflib.get_close_matches(word, list(commands), n=1, cutoff=0.75)
+    if close:
+        return close[0], word
+
+    return None, None
 
 
 def _import_file(path):
@@ -112,18 +154,23 @@ def dispatch(commands, utterance):
         return None
 
     word, _, argument = utterance.partition(" ")
-    module = commands.get(word.lower())
+    name, corrected_from = resolve(commands, word)
 
-    if module is None:
+    if name is None:
         say(f"I don't know the command '{word}'. Say 'computer help' for a list.")
         return None
 
+    if corrected_from:
+        say(f"(heard '{corrected_from}', taking it as '{name}')")
+
+    module = commands[name]
     argument = argument.strip()
 
     if getattr(module, "TAKES_ARG", False):
         if not argument:
-            say(f"'{module.NAME}' needs something to act on, like "
-                f"'computer {module.NAME} notepad'.")
+            example = getattr(module, "EXAMPLE", f"{module.NAME} something")
+            say(f"'{module.NAME}' needs something after it, like "
+                f"'computer {example}'.")
             return None
         return module.run(argument)
 

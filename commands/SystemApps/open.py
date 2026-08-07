@@ -1,31 +1,52 @@
-"""Launch a system app."""
+"""Launch anything -- a Windows app, an installed program, or a website."""
 
 import os
 
 import apps
-from output import say
+import ask
+from output import announce, say
 
 NAME = "open"
 TAKES_ARG = True
-HELP = "open <app>   -- launch an app"
+ALIASES = ("opun", "oben", "ope")
+HELP = "open <app>   -- launch an app, program or website"
+EXAMPLE = "open notepad"
 
 
 def run(argument):
     app = apps.find(argument)
+
     if app is None:
-        say(f"I don't know an app called '{argument}'. "
-            f"Say 'computer help' for the list.")
-        return
+        app = _ask_where_it_is(argument)
+        if app is None:
+            return
 
     # os.startfile goes through the Windows shell, which is what makes this work
-    # for all three kinds of target we have: plain exes, .msc consoles, and the
-    # ms-settings: URI. It also finds apps that are not on PATH (Edge, VLC) via
-    # the App Paths registry, and unlike a shell command it cannot be tricked by
-    # whatever the speech recogniser hands us.
+    # for everything we throw at it: plain exes, .msc consoles, the ms-settings:
+    # URI, Start Menu .lnk shortcuts and https:// addresses alike.
     try:
         os.startfile(app.launch)
     except OSError as e:
-        say(f"Could not open {app.name}: {e}")
+        announce(f"Could not open {app.name}")
+        say(f"({e})")
         return
 
-    say(f"Opening {app.name}...")
+    announce(f"Opening {app.name}")
+
+
+def _ask_where_it_is(wanted):
+    """Not in the catalogue -- get you to point at it once, then remember it."""
+    announce(f"I don't know {wanted}. Pick its program file.")
+
+    path = ask.for_program(wanted)
+    if not path:
+        say(f"Never mind. Say 'computer help' to see what I do know.")
+        return None
+
+    if not os.path.isfile(path):
+        announce("That file is not there.")
+        return None
+
+    app = apps.remember(wanted, path)
+    say(f"Remembered {app.name} -- I won't ask again.")
+    return app
