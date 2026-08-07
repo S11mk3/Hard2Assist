@@ -140,6 +140,9 @@ class App:
             return  # not worth failing over; you just get the default icon
 
         try:
+            # default= sets it for the application rather than just this
+            # window, which is what the taskbar reads.
+            self.root.iconbitmap(default=path)
             self.root.iconbitmap(path)
         except tk.TclError:
             pass
