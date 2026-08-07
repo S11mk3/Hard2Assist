@@ -3,6 +3,7 @@ drift out of step with the actual commands and apps."""
 
 import apps
 import registry
+from output import say
 
 NAME = "help"
 TAKES_ARG = False
@@ -15,14 +16,16 @@ WIDTH = 24
 def run():
     commands = registry.load()
 
-    print("\nCommands (say 'computer' first):\n")
+    say("")
+    say("Commands (say 'computer' first, or just type them here):")
     for name in sorted(commands):
-        print("  " + getattr(commands[name], "HELP", name))
+        say("  " + getattr(commands[name], "HELP", name))
 
-    print("\nApps you can open, close and kill:\n")
+    say("")
+    say("Apps you can open, close and kill:")
     names = apps.names()
     for i in range(0, len(names), COLUMNS):
         row = names[i:i + COLUMNS]
-        print("  " + "".join(name.ljust(WIDTH) for name in row).rstrip())
+        say("  " + "".join(name.ljust(WIDTH) for name in row).rstrip())
 
-    print()
+    say("")

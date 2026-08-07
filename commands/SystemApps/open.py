@@ -3,6 +3,7 @@
 import os
 
 import apps
+from output import say
 
 NAME = "open"
 TAKES_ARG = True
@@ -12,8 +13,8 @@ HELP = "open <app>   -- launch an app"
 def run(argument):
     app = apps.find(argument)
     if app is None:
-        print(f"I don't know an app called '{argument}'. "
-              f"Say 'computer help' for the list.")
+        say(f"I don't know an app called '{argument}'. "
+            f"Say 'computer help' for the list.")
         return
 
     # os.startfile goes through the Windows shell, which is what makes this work
@@ -24,7 +25,7 @@ def run(argument):
     try:
         os.startfile(app.launch)
     except OSError as e:
-        print(f"Could not open {app.name}: {e}")
+        say(f"Could not open {app.name}: {e}")
         return
 
-    print(f"Opening {app.name}...")
+    say(f"Opening {app.name}...")

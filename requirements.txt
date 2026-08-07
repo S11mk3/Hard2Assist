@@ -1,4 +1,6 @@
 SpeechRecognition
 PyAudio
-pyfiglet
 psutil
+
+# Only needed to build the .exe, not to run from source.
+pyinstaller
