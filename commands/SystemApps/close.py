@@ -2,10 +2,15 @@
 
 import apps
 import win
-from output import say
+from output import announce, say
 
 NAME = "close"
 TAKES_ARG = True
+
+# "clothes" is not a joke -- it is what Google's recogniser returns for "close"
+# more often than not.
+ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
+
 HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"
 
 
@@ -21,7 +26,7 @@ def run(argument):
 
     app = apps.find(argument)
     if app is None:
-        say(f"I don't know an app called '{argument}'.")
+        announce(f"I don't know an app called {argument}.")
         return
 
     if every:
@@ -31,7 +36,7 @@ def run(argument):
         handles = [newest] if newest else []
 
     if not handles:
-        say(f"{app.name} does not seem to be open.")
+        announce(f"{app.name} does not seem to be open.")
         return
 
     closed = 0
@@ -47,9 +52,9 @@ def run(argument):
 
     if closed:
         window = "window" if closed == 1 else "windows"
-        say(f"Closing {closed} {app.name} {window}.")
+        announce(f"Closing {closed} {app.name} {window}")
 
     if denied:
-        say(f"Windows won't let me close {app.name} -- it runs as administrator "
-            f"and Hard2Assist does not. Restart Hard2Assist as administrator to "
-            f"control it.")
+        announce(f"Windows won't let me close {app.name}")
+        say(f"It runs as administrator and Hard2Assist does not. Restart "
+            f"Hard2Assist as administrator to control it.")

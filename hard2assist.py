@@ -8,11 +8,14 @@ import os
 import sys
 import tempfile
 
+import apps
 import listener
 import registry
+import speech
 from output import say
 
-EXPECTED_COMMANDS = {"open", "close", "kill", "help", "stop"}
+EXPECTED_COMMANDS = {"open", "close", "kill", "help", "stop", "time", "date",
+                     "battery", "status", "disk", "volume", "play", "search"}
 
 
 def run_selftest():
@@ -34,17 +37,34 @@ def run_selftest():
     commands = registry.load()
     note(f"commands found: {sorted(commands) or 'NONE'}")
 
-    for module_name in ("apps", "win", "psutil", "speech_recognition"):
+    for module_name in ("apps", "win", "psutil", "speech_recognition",
+                        "pyttsx3", "pyttsx3.drivers.sapi5", "comtypes"):
         try:
             __import__(module_name)
-            note(f"import {module_name:<18}: ok")
+            note(f"import {module_name:<24}: ok")
         except Exception as e:
-            note(f"import {module_name:<18}: MISSING ({e})")
+            note(f"import {module_name:<24}: MISSING ({e})")
+
+    # A build with no voice starts perfectly happily and is simply mute, so it
+    # has to be checked rather than noticed.
+    if speech.start():
+        note("speech                          : ok")
+    else:
+        note(f"speech                          : NOT AVAILABLE -- {speech.error()}")
+
+    tally = apps.counts()
+    note(f"apps                            : {sum(tally.values())} "
+         f"({', '.join(f'{k} {v}' for k, v in sorted(tally.items()))})")
 
     missing = EXPECTED_COMMANDS - set(commands)
-    ok = not missing
+    ok = not missing and speech.available()
     note("")
-    note("RESULT: ok" if ok else f"RESULT: FAILED, missing {sorted(missing)}")
+    if missing:
+        note(f"RESULT: FAILED, missing commands {sorted(missing)}")
+    elif not speech.available():
+        note("RESULT: FAILED, no speech")
+    else:
+        note("RESULT: ok")
 
     text = "\n".join(report)
 
@@ -79,6 +99,10 @@ def run_console():
             say(text)
 
     ears = listener.Listener(on_command=on_command, on_status=on_status)
+
+    if speech.start():
+        speech.on_speaking(ears.pause, ears.resume)
+
     ears.run()
 
 

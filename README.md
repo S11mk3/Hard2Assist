@@ -1,122 +1,198 @@
+<div align="center">
+
 # Hard2Assist
 
-Computer Voice Commander. Say "computer" followed by a command and it does it.
+**Talk to your PC. It listens, does the thing, and tells you it did.**
 
-Windows only -- it uses the Windows API to find and close app windows.
+A voice commander for Windows. One file to run, nothing to install.
 
-## Using it
+<img src="docs/screenshot.png" alt="The Hard2Assist window" width="520">
 
-Run `Hard2Assist.exe`. A small window opens and starts listening. There is
-nothing to click -- it is voice only.
+</div>
 
-- **Speak**: say "computer open notepad". Every command starts with "computer".
-- **Watch**: the dot pulses while it is listening, the window shows what it
-  heard and what it did.
-- **Quit**: the X button, or say "computer stop". The microphone is released --
-  nothing keeps listening in the background.
+---
 
-Two things it needs: a working microphone, and an internet connection, because
-recognition uses Google's free API. Without either it will say so and do
-nothing else.
+## What it does
 
-## Commands
+Say **"computer"**, then what you want.
 
-| Say | Does |
+| Say this | And it |
 | --- | --- |
-| `computer open notepad` | launches an app |
+| `computer open notepad` | launches an app, a program, or a website |
+| `computer open obs studio` | opens anything in your Start Menu -- no setup |
+| `computer open youtube` | opens the site in your browser |
 | `computer close notepad` | closes it, letting it save first |
-| `computer kill notepad` | forces it to stop, without saving |
-| `computer close all notepad` | closes every notepad window |
-| `computer help` | lists every command and app |
+| `computer kill notepad` | forces it to stop |
+| `computer time` | 🔊 *"It's 8:02 pm"* |
+| `computer battery` | 🔊 *"82 percent, charging"* |
+| `computer status` | 🔊 *"CPU 12 percent, memory 46 percent"* |
+| `computer disk` | 🔊 *"C has 58 gigabytes free"* |
+| `computer volume up` | louder. `down` and `mute` too |
+| `computer play` | play or pause whatever is playing |
+| `computer next` | skip a track. `back` for the previous one |
+| `computer search how to cook rice` | opens the results in your browser |
+| `computer help` | lists everything it knows |
 | `computer stop` | quits |
 
-`close` asks the window to close, the same as clicking its X, so anything with
-unsaved work will still prompt you. `kill` does not ask. Use `close` unless it
-won't work.
+It **talks back**. Short confirmations only -- it will not read you a list of
+twenty-six apps. Say `computer quiet` to stop it, `computer speak` to start again.
 
-### Which window gets closed
+---
 
-`close cmd` closes the **most recently opened** cmd, so opening one by voice and
-then closing it leaves your own windows alone. `close all cmd` closes every one.
+## Getting started
 
-The one case this gets wrong: if you open a cmd by hand *after* the one
-Hard2Assist opened, that newer one is what `close cmd` targets.
+Download or build `Hard2Assist.exe`, then double-click it. That is the whole setup --
+Python and every library are packed inside the file, so it runs on a Windows PC with
+nothing installed.
 
-### Apps that run as administrator
+It needs two things:
 
-Some apps run at a higher privilege level than Hard2Assist -- Device Manager,
-Services, Disk Management, Computer Management, Event Viewer and Registry
-Editor all can. Windows will not let a normal program send window messages to
-one of those, so `close` reports that it was refused rather than pretending it
-worked. `kill` often still gets them. To use `close` on them, start
-Hard2Assist as administrator.
+- **a microphone**
+- **an internet connection**, because recognition uses Google's free speech API
 
-## Building the .exe
+---
 
-    pip install -r requirements.txt
-    python build.py
+## The things it does well
 
-That writes `dist\Hard2Assist.exe`. Python and every library are packed inside
-it, so you can copy that single file to a Windows PC with nothing installed and
-it will run.
+### It knows what is on your PC
 
-## Running from source
+Every shortcut in your Start Menu is found at startup -- over a hundred programs on a
+typical machine -- so `computer open obs studio` works without you configuring anything.
+Install something new and it works next time you start.
 
-    pip install -r requirements.txt
-    python hard2assist.py
+### If it does not know something, it asks
 
-`python hard2assist.py --console` runs it in the terminal with no window, which
-is easier to debug.
+Say `computer open photoshop` for a program it has not found, and it opens a file picker.
+Click the program once and it is remembered forever, in
+`%APPDATA%\Hard2Assist\my-apps.json`.
 
-## Adding a command
+You cannot dictate `C:\Program Files\...` out loud, so it does not ask you to.
 
-Drop a file in `commands/<any folder>/`:
+### It expects to be misheard
+
+Speech recognition hears **"clothes"** when you say **"close"**, nearly every time. So
+commands carry a list of what they actually get misheard as, and anything still unmatched
+goes through fuzzy matching. It tells you when it corrects something:
+
+```
+> clothes notepad
+(heard 'clothes', taking it as 'close')
+Closing 1 notepad window
+```
+
+App names get the same treatment -- `computer open ccleaner` finds *CCleaner 7*, and
+`computer open obs` finds *OBS Studio*.
+
+### `close` closes the right window
+
+`close cmd` closes the **most recently opened** cmd, so opening one by voice and closing it
+leaves the one you were already working in alone. `close all cmd` closes every one.
+
+### It does not hear itself
+
+While it speaks, the microphone is off. Otherwise it hears *"Closing one window"*, picks the
+word *close* out of it, and sets off again.
+
+---
+
+## Building it
+
+```
+pip install -r requirements.txt
+python build.py
+```
+
+That writes `dist\Hard2Assist.exe`. Copy that one file anywhere.
+
+To run from source instead:
+
+```
+python hard2assist.py             # the window
+python hard2assist.py --console   # no window, easier to debug
+python hard2assist.py --selftest  # check a build is complete
+```
+
+`--selftest` matters after building. A build missing a piece still starts and still opens its
+window -- it is just silently mute, or has no commands. This is the only thing that catches it.
+
+---
+
+## Adding your own
+
+### A command
+
+Drop a file in any folder under `commands/`:
 
 ```python
-from output import say
+from output import announce
 
 NAME = "greet"
 TAKES_ARG = False
+ALIASES = ("greeting", "great")   # what the recogniser might hear instead
 HELP = "greet        -- say hello"
 
 def run():
-    say("Hello!")
+    announce("Hello!")
 ```
 
-It is picked up on the next start, and `help` lists it automatically. Set
-`TAKES_ARG = True` and take a `run(argument)` to get the rest of the sentence.
+It is picked up next start and `help` lists it automatically. Use `TAKES_ARG = True` and
+`run(argument)` to get the rest of the sentence. `announce()` speaks and writes;
+`say()` only writes.
 
-Use `say()` rather than `print()` -- the built .exe has no console, so a
-`print()` would go nowhere or raise.
+This works with the built .exe too -- put a `commands` folder next to `Hard2Assist.exe`,
+drop the file in, restart. No rebuild.
 
-This works with the .exe too: put a `commands` folder next to
-`Hard2Assist.exe`, drop your file in, and restart. No rebuild needed.
+### An app or a website
 
-## Adding an app
-
-Add one line to the `APPS` list in `apps.py`:
+One line in `apps/system.py` or `apps/websites.py`:
 
 ```python
 App("notepad", "notepad", "Notepad")
 #    name      launch      window title
+
+site("youtube", "https://www.youtube.com")
 ```
 
-`launch` goes to the Windows shell, so an exe, a `.msc` console or a
-`ms-settings:` URI all work. `title` is how `close` and `kill` find the window
-once it is open -- a substring is enough. `aliases=(...)` adds other things you
-might say, including misspellings the recogniser tends to produce.
+`launch` goes to the Windows shell, so an exe, a `.msc` console, a `ms-settings:` URI, a
+`.lnk` shortcut or a URL all work.
 
-## Layout
+---
 
-| File | Does |
-| --- | --- |
-| `hard2assist.py` | entry point -- window, or `--console` |
-| `gui.py` | the window |
-| `theme.py` | colours and fonts, all in one place |
-| `listener.py` | the microphone loop |
-| `registry.py` | finds command modules, decides which one you asked for |
-| `apps.py` | the app catalogue |
-| `win.py` | the only Windows API code |
-| `output.py` | routes messages to the log or the terminal |
-| `build.py` | builds the .exe |
-| `commands/` | one file per command |
+## Where things live
+
+```
+hard2assist.py      entry point -- window, --console, or --selftest
+gui.py              the window
+theme.py            colours and fonts, all in one place
+listener.py         the microphone loop
+speech.py           the voice
+registry.py         finds commands, works out which one you meant
+output.py           say() and announce()
+ask.py              asking you for a file mid-command
+win.py              the only Windows API code
+build.py            builds the .exe
+
+commands/
+  TextCommands/     answers      help time date battery status disk
+  SystemApps/       acting       open close kill
+  Controls/         the PC       volume play next back quiet speak stop
+  Web/              online       search
+
+apps/
+  system.py         built into Windows
+  installed.py      found in your Start Menu, plus ones you picked
+  websites.py       sites
+```
+
+---
+
+## Known limits
+
+- **Elevated apps.** Device Manager, Services, Registry Editor and friends can run as
+  administrator. Windows will not let a normal program send window messages to one, so
+  `close` reports that it was refused rather than pretending. `kill` usually still works.
+  Run Hard2Assist as administrator to `close` them.
+- **Closing Start Menu programs is best-effort.** They are found by window title, which does
+  not always match the shortcut name. Programs you pick yourself are matched by their
+  process and close reliably. Opening always works.
+- **Speech needs the internet.** There is no offline recognition.

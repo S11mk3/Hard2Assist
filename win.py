@@ -142,6 +142,26 @@ def close_window(hwnd):
     raise OSError(ctypes.WinError(ctypes.get_last_error()))
 
 
+# Media and volume keys. Windows treats these as if they came from a keyboard
+# with media buttons, so they work with whatever is playing -- Spotify, a
+# YouTube tab, VLC -- without knowing anything about it.
+VK_VOLUME_MUTE = 0xAD
+VK_VOLUME_DOWN = 0xAE
+VK_VOLUME_UP = 0xAF
+VK_MEDIA_NEXT = 0xB0
+VK_MEDIA_PREVIOUS = 0xB1
+VK_MEDIA_PLAY_PAUSE = 0xB3
+
+KEYEVENTF_KEYUP = 0x0002
+
+
+def tap_key(vk, times=1):
+    """Press and release a key, as though on a real keyboard."""
+    for _ in range(times):
+        user32.keybd_event(vk, 0, 0, 0)
+        user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+
+
 def pid_of_window(hwnd):
     """The process id that owns a window."""
     pid = wintypes.DWORD()

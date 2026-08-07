@@ -1,0 +1,38 @@
+"""Search the web for whatever you just said."""
+
+import os
+import urllib.parse
+
+from output import announce, say
+
+NAME = "search"
+TAKES_ARG = True
+ALIASES = ("google", "search for", "look up", "surge")
+HELP = "search <words> -- search the web"
+EXAMPLE = "search how to cook rice"
+
+ENGINE = "https://www.google.com/search?q="
+
+
+def run(argument):
+    words = argument.strip()
+
+    # "search for cats" and "google for cats" both end up here; drop the "for"
+    # so it does not become part of the search.
+    if words.lower().startswith("for "):
+        words = words[4:].strip()
+
+    if not words:
+        announce("What should I search for?")
+        return
+
+    url = ENGINE + urllib.parse.quote_plus(words)
+
+    try:
+        os.startfile(url)
+    except OSError as e:
+        announce("Could not open the browser")
+        say(f"({e})")
+        return
+
+    announce(f"Searching for {words}")

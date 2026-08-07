@@ -1,37 +1,10 @@
-"""The catalogue of apps Hard2Assist can open and close.
+"""Apps built into Windows.
 
-This is the single source of truth. `open` launches App.launch, `close`/`kill`
-find the app's windows with App.title / App.window_class, and `help` prints
-App.name. Adding an app means adding one line here and nothing else.
+These are hand-written because they need details we cannot discover: the window
+title to find them by, and which ones must never be killed.
 """
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class App:
-    name: str
-    """Canonical name. This is what `help` prints and what we say back to the user."""
-
-    launch: str
-    """Passed to os.startfile(). Can be an exe, a .msc console or a ms-settings: URI."""
-
-    title: str = ""
-    """Case-insensitive substring of the window title, used to find the app once open."""
-
-    aliases: tuple = ()
-    """Other things the user might say. Includes misspellings the recogniser produces."""
-
-    window_class: str = ""
-    """Win32 class name, for apps whose title is not stable (explorer shows the folder name)."""
-
-    protected: bool = False
-    """Never force-kill this. Terminating explorer.exe takes down the taskbar and desktop."""
-
-    def matches(self, spoken):
-        spoken = spoken.lower().strip()
-        return spoken == self.name or spoken in self.aliases
-
+from .app import App
 
 # Aliases are lowercase. The odd-looking ones ("task manger", "disc managment")
 # are not typos in this file -- they are what speech recognition actually returns.
@@ -73,20 +46,4 @@ APPS = [
     App("on screen keyboard", "osk", "On-Screen Keyboard"),
 
     App("edge", "msedge", "Edge"),
-    App("vlc", "vlc", "VLC media player"),
 ]
-
-
-def find(spoken):
-    """Return the App the user asked for, or None. Matches name or alias."""
-    if not spoken:
-        return None
-    for app in APPS:
-        if app.matches(spoken):
-            return app
-    return None
-
-
-def names():
-    """Canonical names only -- aliases and misspellings stay hidden from `help`."""
-    return [app.name for app in APPS]
