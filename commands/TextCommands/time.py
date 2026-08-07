@@ -1,8 +1,8 @@
-"""What time is it."""
+﻿"""What time is it."""
 
 from datetime import datetime
 
-from output import announce
+from output import say
 
 NAME = "time"
 TAKES_ARG = False
@@ -14,4 +14,4 @@ def run():
     now = datetime.now()
     # %#I is Windows' "hour without a leading zero". Saying "It's 07:05" sounds
     # like a robot; "It's 7:05" does not.
-    announce(f"It's {now.strftime('%#I:%M %p').lower()}")
+    say(f"It's {now.strftime('%#I:%M %p').lower()}")

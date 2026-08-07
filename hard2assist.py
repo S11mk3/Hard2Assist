@@ -7,12 +7,13 @@ is handy when something is going wrong and you want to see it happen.
 import os
 import sys
 import tempfile
+import time
 
 import apps
 import listener
 import registry
 import speech
-from output import say
+from output import detail, say
 
 EXPECTED_COMMANDS = {"open", "close", "kill", "help", "stop", "time", "date",
                      "battery", "status", "disk", "volume", "play", "search"}
@@ -47,8 +48,23 @@ def run_selftest():
 
     # A build with no voice starts perfectly happily and is simply mute, so it
     # has to be checked rather than noticed.
+    # Actually say something. Building the engine can succeed in a bundle that
+    # then cannot make a sound, so "it started" is not proof of anything.
+    speaks = False
     if speech.start():
-        note("speech                          : ok")
+        speech.speak("Hard2Assist self test.")
+        deadline = time.time() + 20
+        while time.time() < deadline and not speech.spoken_count():
+            if speech.error():
+                break
+            time.sleep(0.2)
+        speaks = speech.spoken_count() > 0
+
+    if speaks:
+        note("speech                          : ok (said a test phrase)")
+    elif speech.available():
+        note(f"speech                          : ENGINE STARTED BUT SILENT "
+             f"-- {speech.error() or 'no error reported'}")
     else:
         note(f"speech                          : NOT AVAILABLE -- {speech.error()}")
 
@@ -57,12 +73,12 @@ def run_selftest():
          f"({', '.join(f'{k} {v}' for k, v in sorted(tally.items()))})")
 
     missing = EXPECTED_COMMANDS - set(commands)
-    ok = not missing and speech.available()
+    ok = not missing and speaks
     note("")
     if missing:
         note(f"RESULT: FAILED, missing commands {sorted(missing)}")
-    elif not speech.available():
-        note("RESULT: FAILED, no speech")
+    elif not speaks:
+        note("RESULT: FAILED, it cannot speak")
     else:
         note("RESULT: ok")
 
@@ -86,17 +102,19 @@ def run_console():
         say("No commands were found, so there is nothing to do.")
         return
 
-    say("Hard2Assist")
-    say("Commands: " + ", ".join(sorted(commands)))
+    # detail(), not say() -- a banner and a list of every command is not
+    # something anyone wants read aloud at startup.
+    detail("Hard2Assist")
+    detail("Commands: " + ", ".join(sorted(commands)))
 
     def on_command(command):
-        say(f"> {command}")
+        detail(f"> {command}")
         if registry.dispatch(commands, command) is registry.STOP:
             ears.stop()
 
     def on_status(text, transient=False):
         if not transient:          # transient ones would spam the terminal
-            say(text)
+            detail(text)
 
     ears = listener.Listener(on_command=on_command, on_status=on_status)
 
@@ -123,4 +141,4 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        say("\nExiting.")
+        detail("\nExiting.")

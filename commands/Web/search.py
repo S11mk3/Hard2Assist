@@ -1,9 +1,9 @@
-"""Search the web for whatever you just said."""
+﻿"""Search the web for whatever you just said."""
 
 import os
 import urllib.parse
 
-from output import announce, say
+from output import detail, say
 
 NAME = "search"
 TAKES_ARG = True
@@ -23,7 +23,7 @@ def run(argument):
         words = words[4:].strip()
 
     if not words:
-        announce("What should I search for?")
+        say("What should I search for?")
         return
 
     url = ENGINE + urllib.parse.quote_plus(words)
@@ -31,8 +31,8 @@ def run(argument):
     try:
         os.startfile(url)
     except OSError as e:
-        announce("Could not open the browser")
-        say(f"({e})")
+        say("Could not open the browser")
+        detail(f"({e})")
         return
 
-    announce(f"Searching for {words}")
+    say(f"Searching for {words}")

@@ -1,7 +1,7 @@
-"""Start talking back again."""
+﻿"""Start talking back again."""
 
 import speech
-from output import announce, say
+from output import detail, say
 
 NAME = "speak"
 TAKES_ARG = False
@@ -11,8 +11,8 @@ HELP = "speak        -- start speaking replies again"
 
 def run():
     if not speech.available():
-        say("I could not start a voice on this PC.")
+        detail("I could not start a voice on this PC.")
         return
 
     speech.set_enabled(True)
-    announce("Speaking again")
+    say("Speaking again")

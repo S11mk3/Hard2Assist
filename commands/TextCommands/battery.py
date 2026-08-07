@@ -1,8 +1,8 @@
-"""How much battery is left."""
+﻿"""How much battery is left."""
 
 import psutil
 
-from output import announce
+from output import say
 
 NAME = "battery"
 TAKES_ARG = False
@@ -14,16 +14,16 @@ def run():
     state = psutil.sensors_battery()
 
     if state is None:
-        announce("This PC has no battery.")
+        say("This PC has no battery.")
         return
 
     percent = round(state.percent)
 
     if state.power_plugged:
         if percent >= 99:
-            announce("Fully charged and plugged in.")
+            say("Fully charged and plugged in.")
         else:
-            announce(f"{percent} percent, charging.")
+            say(f"{percent} percent, charging.")
         return
 
     message = f"{percent} percent"
@@ -37,4 +37,4 @@ def run():
         else:
             message += f", about {minutes} minutes left"
 
-    announce(message + ".")
+    say(message + ".")

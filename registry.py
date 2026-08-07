@@ -18,7 +18,7 @@ import importlib.util
 import os
 import sys
 
-from output import say
+from output import detail, say
 
 # A command returns this to tell the main loop to shut down. `stop` is the only
 # one that does.
@@ -65,7 +65,7 @@ def load():
                 continue
 
             if not hasattr(module, "NAME") or not hasattr(module, "run"):
-                say(f"Skipping {os.path.basename(path)}: it needs a NAME and a run()")
+                detail(f"Skipping {os.path.basename(path)}: it needs a NAME and a run()")
                 continue
 
             name = module.NAME.lower()
@@ -135,7 +135,7 @@ def _import_file(path):
         spec.loader.exec_module(module)
         return module
     except Exception as e:
-        say(f"Could not load {os.path.basename(path)}: {e}")
+        detail(f"Could not load {os.path.basename(path)}: {e}")
         sys.modules.pop(unique, None)
         return None
 
@@ -161,7 +161,9 @@ def dispatch(commands, utterance):
         return None
 
     if corrected_from:
-        say(f"(heard '{corrected_from}', taking it as '{name}')")
+        # Written but not spoken: you are about to hear the command's own
+        # confirmation, which already tells you what it decided to do.
+        detail(f"(heard '{corrected_from}', taking it as '{name}')")
 
     module = commands[name]
     argument = argument.strip()

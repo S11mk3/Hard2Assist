@@ -1,8 +1,8 @@
-"""How hard the PC is working."""
+﻿"""How hard the PC is working."""
 
 import psutil
 
-from output import announce, say
+from output import detail, say
 
 NAME = "status"
 TAKES_ARG = False
@@ -16,9 +16,9 @@ def run():
     cpu = psutil.cpu_percent(interval=0.4)
     memory = psutil.virtual_memory()
 
-    announce(f"CPU {round(cpu)} percent, memory {round(memory.percent)} percent")
+    say(f"CPU {round(cpu)} percent, memory {round(memory.percent)} percent")
 
     used = memory.used / (1024 ** 3)
     total = memory.total / (1024 ** 3)
-    say(f"  {used:.1f} of {total:.1f} GB in use, "
+    detail(f"  {used:.1f} of {total:.1f} GB in use, "
         f"{psutil.cpu_count(logical=True)} cores")

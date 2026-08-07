@@ -1,10 +1,10 @@
-"""Launch anything -- a Windows app, an installed program, or a website."""
+﻿"""Launch anything -- a Windows app, an installed program, or a website."""
 
 import os
 
 import apps
 import ask
-from output import announce, say
+from output import detail, say
 
 NAME = "open"
 TAKES_ARG = True
@@ -27,26 +27,26 @@ def run(argument):
     try:
         os.startfile(app.launch)
     except OSError as e:
-        announce(f"Could not open {app.name}")
-        say(f"({e})")
+        say(f"Could not open {app.name}")
+        detail(f"({e})")
         return
 
-    announce(f"Opening {app.name}")
+    say(f"Opening {app.name}")
 
 
 def _ask_where_it_is(wanted):
     """Not in the catalogue -- get you to point at it once, then remember it."""
-    announce(f"I don't know {wanted}. Pick its program file.")
+    say(f"I don't know {wanted}. Pick its program file.")
 
     path = ask.for_program(wanted)
     if not path:
-        say(f"Never mind. Say 'computer help' to see what I do know.")
+        detail(f"Never mind. Say 'computer help' to see what I do know.")
         return None
 
     if not os.path.isfile(path):
-        announce("That file is not there.")
+        say("That file is not there.")
         return None
 
     app = apps.remember(wanted, path)
-    say(f"Remembered {app.name} -- I won't ask again.")
+    say(f"Got it. I won't ask about {app.name} again.")
     return app

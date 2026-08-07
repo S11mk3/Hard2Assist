@@ -1,4 +1,4 @@
-"""Play, pause and skip whatever is playing.
+﻿"""Play, pause and skip whatever is playing.
 
 These are the media keys a keyboard with playback buttons sends, so Windows
 routes them to whichever app is playing -- Spotify, a YouTube tab, VLC. Nothing
@@ -6,7 +6,7 @@ here needs to know which.
 """
 
 import win
-from output import announce
+from output import say
 
 NAME = "play"
 TAKES_ARG = False
@@ -18,4 +18,4 @@ def run():
     win.tap_key(win.VK_MEDIA_PLAY_PAUSE)
     # The same key does both and there is no way to ask which happened, so the
     # wording has to cover either.
-    announce("Play or pause")
+    say("Play or pause")
