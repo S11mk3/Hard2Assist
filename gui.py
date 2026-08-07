@@ -1,21 +1,38 @@
 """The Hard2Assist window.
 
+Voice only -- there is nothing to click and nothing to type. The window shows
+what it is doing and what it heard. Close it with the X, or say "computer stop".
+
 Two threads: this one runs tkinter, and a background one runs the microphone.
 They only talk through a queue -- tkinter is not safe to touch from another
 thread, and the microphone loop would otherwise be calling straight into it.
 """
 
+import math
 import queue
 import threading
 import tkinter as tk
-from tkinter import scrolledtext
 
+import apps
 import listener
 import output
 import registry
+import theme
 
-WINDOW_SIZE = "560x440"
-STATUS_CLEAR_MS = 3000
+WINDOW_SIZE = "520x460"
+HINT_CLEAR_MS = 4000
+PULSE_MS = 50
+
+DEFAULT_HINT = 'say "computer help" to hear what I can do'
+
+# The listener describes itself in sentences, which suit the console. Up here we
+# want one short word.
+STATES = {
+    "Listening": "LISTENING",
+    "Paused": "PAUSED",
+    "No microphone found": "NO MICROPHONE",
+    "Microphone stopped": "MIC STOPPED",
+}
 
 
 class App:
@@ -23,9 +40,11 @@ class App:
         self.root = root
         self.messages = queue.Queue()
 
-        # One command at a time, whether it came from the microphone or the box.
+        # One command at a time, whichever thread asked for it.
         self.command_lock = threading.Lock()
-        self._clear_status_job = None
+        self._hint_job = None
+        self._pulse = 0.0
+        self._listening = False
 
         self._build_widgets()
 
@@ -33,10 +52,13 @@ class App:
         output.on_message(self.log_from_any_thread)
 
         self.commands = registry.load()
-        if not self.commands:
-            self.log("No commands were found, so there is nothing to do.")
+        if self.commands:
+            # Something in the log from the start, so the panel does not look
+            # broken before you have said anything.
+            self.log(f"Ready. {len(self.commands)} commands, "
+                     f"{len(apps.names())} apps.", tag="dim")
         else:
-            self.log("Ready. Say 'computer help' or type 'help' below.")
+            self.log("No commands were found, so there is nothing to do.")
 
         self.listener = listener.Listener(
             on_command=self.run_command,
@@ -47,55 +69,96 @@ class App:
 
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.after(100, self._drain)
+        self.root.after(PULSE_MS, self._animate)
 
     # -- layout ---------------------------------------------------------------
 
     def _build_widgets(self):
         self.root.title("Hard2Assist")
         self.root.geometry(WINDOW_SIZE)
-        self.root.minsize(420, 320)
+        self.root.minsize(420, 380)
+        self.root.configure(bg=theme.BG)
 
-        self.status = tk.StringVar(value="Starting...")
         tk.Label(
-            self.root, textvariable=self.status, anchor="w",
-            font=("Segoe UI", 11, "bold"), padx=10, pady=8,
-        ).pack(fill="x")
+            self.root, text="H A R D 2 A S S I S T", font=theme.TITLE_FONT,
+            bg=theme.BG, fg=theme.DIM,
+        ).pack(pady=(16, 0))
 
-        self.log_box = scrolledtext.ScrolledText(
-            self.root, wrap="word", state="disabled",
-            font=("Consolas", 9), height=15,
+        # The pulsing dot: alive and listening, or still and grey.
+        self.canvas = tk.Canvas(
+            self.root, width=120, height=120, bg=theme.BG,
+            highlightthickness=0,
         )
-        self.log_box.pack(fill="both", expand=True, padx=10)
+        self.canvas.pack(pady=(14, 0))
+        self.ring = self.canvas.create_oval(0, 0, 0, 0, outline=theme.ACCENT_DIM)
+        self.dot = self.canvas.create_oval(0, 0, 0, 0, fill=theme.ACCENT, width=0)
 
-        entry_row = tk.Frame(self.root)
-        entry_row.pack(fill="x", padx=10, pady=(8, 0))
+        self.state = tk.StringVar(value="STARTING")
+        tk.Label(
+            self.root, textvariable=self.state, font=theme.STATE_FONT,
+            bg=theme.BG, fg=theme.TEXT,
+        ).pack(pady=(10, 0))
 
-        self.entry = tk.Entry(entry_row, font=("Segoe UI", 10))
-        self.entry.pack(side="left", fill="x", expand=True, ipady=3)
-        self.entry.bind("<Return>", lambda _event: self.run_typed())
-        self.entry.focus()
+        self.hint = tk.StringVar(value=DEFAULT_HINT)
+        tk.Label(
+            self.root, textvariable=self.hint, font=theme.HINT_FONT,
+            bg=theme.BG, fg=theme.DIM, wraplength=440,
+        ).pack(pady=(4, 14))
 
-        tk.Button(entry_row, text="Go", width=8, command=self.run_typed).pack(
-            side="left", padx=(6, 0)
+        tk.Frame(self.root, bg=theme.LINE, height=1).pack(fill="x", padx=22)
+
+        # A plain Text rather than ScrolledText: a scrollbar would be the one
+        # piece of grey Windows chrome in an otherwise dark window, and the log
+        # follows itself anyway.
+        self.log_box = tk.Text(
+            self.root, wrap="word", state="disabled", font=theme.LOG_FONT,
+            bg=theme.PANEL, fg=theme.TEXT, insertbackground=theme.TEXT,
+            relief="flat", highlightthickness=0, padx=14, pady=10,
+        )
+        self.log_box.pack(fill="both", expand=True, padx=0, pady=0)
+
+        self.log_box.tag_configure("command", foreground=theme.ACCENT)
+        self.log_box.tag_configure("normal", foreground=theme.TEXT)
+        self.log_box.tag_configure("warn", foreground=theme.WARN)
+        self.log_box.tag_configure("dim", foreground=theme.DIM)
+
+    # -- the pulse ------------------------------------------------------------
+
+    def _animate(self):
+        centre, base = 60, 13
+
+        if self._listening:
+            self._pulse += 0.09
+            breathe = (math.sin(self._pulse) + 1) / 2          # 0..1
+
+            radius = base + breathe * 3
+            self.canvas.itemconfigure(
+                self.dot, fill=theme.blend(theme.ACCENT_DIM, theme.ACCENT, breathe)
+            )
+
+            # The ring expands outward and fades into the background.
+            ring_radius = base + 6 + breathe * 26
+            self.canvas.itemconfigure(
+                self.ring,
+                outline=theme.blend(theme.ACCENT_DIM, theme.BG, breathe),
+            )
+        else:
+            radius = base
+            ring_radius = base + 6
+            self.canvas.itemconfigure(self.dot, fill=theme.DIM)
+            self.canvas.itemconfigure(self.ring, outline=theme.LINE)
+
+        self.canvas.coords(
+            self.dot,
+            centre - radius, centre - radius, centre + radius, centre + radius,
+        )
+        self.canvas.coords(
+            self.ring,
+            centre - ring_radius, centre - ring_radius,
+            centre + ring_radius, centre + ring_radius,
         )
 
-        button_row = tk.Frame(self.root)
-        button_row.pack(fill="x", padx=10, pady=8)
-
-        self.listen_button = tk.Button(
-            button_row, text="Stop listening", width=16,
-            command=self.toggle_listening,
-        )
-        self.listen_button.pack(side="left")
-
-        tk.Button(
-            button_row, text="Help", width=10,
-            command=lambda: self.run_command("help"),
-        ).pack(side="left", padx=6)
-
-        tk.Button(button_row, text="Quit", width=10, command=self.quit).pack(
-            side="right"
-        )
+        self.root.after(PULSE_MS, self._animate)
 
     # -- messages between threads ---------------------------------------------
 
@@ -120,63 +183,51 @@ class App:
 
     # -- widgets --------------------------------------------------------------
 
-    def log(self, text):
+    def log(self, text, tag=None):
+        if tag is None:
+            if text.startswith(">"):
+                tag = "command"
+            elif text.startswith(("Could not", "I could not", "I don't know",
+                                  "Not allowed", "Windows won't", "I won't",
+                                  "Cannot reach", "Speech recognition needs")):
+                tag = "warn"
+            else:
+                tag = "normal"
+
         self.log_box.configure(state="normal")
-        self.log_box.insert("end", text + "\n")
+        self.log_box.insert("end", text + "\n", tag)
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
 
     def set_status(self, text, transient=False):
-        self.status.set(text)
-
-        if self._clear_status_job is not None:
-            self.root.after_cancel(self._clear_status_job)
-            self._clear_status_job = None
-
         if transient:
-            self._clear_status_job = self.root.after(
-                STATUS_CLEAR_MS, self._restore_status
-            )
+            self.hint.set(text)
+            if self._hint_job is not None:
+                self.root.after_cancel(self._hint_job)
+            self._hint_job = self.root.after(HINT_CLEAR_MS, self._restore_hint)
+            return
 
-    def _restore_status(self):
-        self._clear_status_job = None
-        self.status.set("Paused" if self.listener.paused else "Listening")
+        self.state.set(STATES.get(text, text.upper().rstrip(".")))
+        self._listening = text == "Listening"
 
-    # -- actions --------------------------------------------------------------
+    def _restore_hint(self):
+        self._hint_job = None
+        self.hint.set(DEFAULT_HINT)
+
+    # -- running commands -----------------------------------------------------
 
     def run_command(self, command):
-        """Run one command. Called from the microphone thread and from here."""
+        """Run one command. Called from the microphone thread."""
         with self.command_lock:
             self.log_from_any_thread(f"> {command}")
             try:
                 result = registry.dispatch(self.commands, command)
             except Exception as e:
-                self.log_from_any_thread(f"That command failed: {e}")
+                self.log_from_any_thread(f"Could not run that: {e}")
                 return
 
         if result is registry.STOP:
             self.root.after(0, self.quit)
-
-    def run_typed(self):
-        text = self.entry.get().strip()
-        if not text:
-            return
-        self.entry.delete(0, "end")
-
-        # Typing "computer open notepad" and "open notepad" both work.
-        command = listener.strip_prefix(text, required=False)
-        if command:
-            threading.Thread(
-                target=self.run_command, args=(command,), daemon=True
-            ).start()
-
-    def toggle_listening(self):
-        if self.listener.paused:
-            self.listener.resume()
-            self.listen_button.configure(text="Stop listening")
-        else:
-            self.listener.pause()
-            self.listen_button.configure(text="Start listening")
 
     def quit(self):
         self.listener.stop()

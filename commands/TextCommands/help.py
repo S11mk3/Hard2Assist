@@ -17,7 +17,7 @@ def run():
     commands = registry.load()
 
     say("")
-    say("Commands (say 'computer' first, or just type them here):")
+    say("Commands (say 'computer' first):")
     for name in sorted(commands):
         say("  " + getattr(commands[name], "HELP", name))
 

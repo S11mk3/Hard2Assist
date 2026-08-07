@@ -123,7 +123,7 @@ def dispatch(commands, utterance):
     if getattr(module, "TAKES_ARG", False):
         if not argument:
             say(f"'{module.NAME}' needs something to act on, like "
-                f"'{module.NAME} notepad'.")
+                f"'computer {module.NAME} notepad'.")
             return None
         return module.run(argument)
 

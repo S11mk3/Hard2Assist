@@ -78,10 +78,13 @@ class Listener:
         try:
             microphone = sr.Microphone()
         except Exception as e:
-            # No input device, or PyAudio missing. Not fatal -- you can still
-            # type commands.
+            # No input device, or PyAudio missing. Hard2Assist is voice only, so
+            # there is nothing it can do until that is sorted out.
             self.on_status("No microphone found")
-            say(f"No microphone available ({e}). You can still type commands.")
+            say("I could not find a microphone, and I only take voice commands.")
+            say("Plug one in, check it is enabled in Windows sound settings, "
+                "then start Hard2Assist again.")
+            say(f"({e})")
             return
 
         try:

@@ -6,17 +6,18 @@ Windows only -- it uses the Windows API to find and close app windows.
 
 ## Using it
 
-Run `Hard2Assist.exe`. A small window opens and starts listening.
+Run `Hard2Assist.exe`. A small window opens and starts listening. There is
+nothing to click -- it is voice only.
 
-- **Speak**: say "computer open notepad".
-- **Or type**: use the box at the bottom. The word "computer" is optional there,
-  so it works with no microphone.
-- **Stop listening**: the button pauses the microphone without quitting.
-- **Quit**: the X button. The microphone is released -- nothing keeps listening
-  in the background.
+- **Speak**: say "computer open notepad". Every command starts with "computer".
+- **Watch**: the dot pulses while it is listening, the window shows what it
+  heard and what it did.
+- **Quit**: the X button, or say "computer stop". The microphone is released --
+  nothing keeps listening in the background.
 
-Speech recognition uses Google's free API, so it needs an internet connection.
-Typed commands work offline.
+Two things it needs: a working microphone, and an internet connection, because
+recognition uses Google's free API. Without either it will say so and do
+nothing else.
 
 ## Commands
 
@@ -111,6 +112,7 @@ might say, including misspellings the recogniser tends to produce.
 | --- | --- |
 | `hard2assist.py` | entry point -- window, or `--console` |
 | `gui.py` | the window |
+| `theme.py` | colours and fonts, all in one place |
 | `listener.py` | the microphone loop |
 | `registry.py` | finds command modules, decides which one you asked for |
 | `apps.py` | the app catalogue |
