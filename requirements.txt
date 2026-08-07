@@ -2,6 +2,7 @@ SpeechRecognition
 PyAudio
 psutil
 pyttsx3
+pycaw
 
 # Only needed to build the .exe, not to run from source.
 pyinstaller

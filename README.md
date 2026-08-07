@@ -27,6 +27,7 @@ Say **"computer"**, then what you want.
 | `computer battery` | 🔊 *"82 percent, charging"* |
 | `computer status` | 🔊 *"CPU 12 percent, memory 46 percent"* |
 | `computer disk` | 🔊 *"C has 58 gigabytes free"* |
+| `computer volume 50` | sets it to exactly 50%. "fifty" works too |
 | `computer volume up` | louder. `down` and `mute` too |
 | `computer play` | play or pause whatever is playing |
 | `computer next` | skip a track. `back` for the previous one |

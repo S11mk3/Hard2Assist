@@ -82,6 +82,57 @@ def spoken_count():
     return len(_spoken)
 
 
+def _safely(hook):
+    """Run a pause/resume hook without letting it kill this thread."""
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception:
+        pass
+
+
+def _say_with(engine, text):
+    """Say one line, rebuilding the engine if it has stopped working.
+
+    pyttsx3 engines go bad -- an interrupted runAndWait() leaves the driver
+    thinking its loop is still running, and every later call fails. Left alone
+    that means the app speaks once and is mute for the rest of the session, so
+    a failure gets one fresh engine and one retry rather than being terminal.
+    """
+    try:
+        engine.say(text)
+        engine.runAndWait()
+        return engine
+    except Exception:
+        pass
+
+    try:
+        engine.stop()
+    except Exception:
+        pass
+
+    fresh = _new_engine()
+    fresh.say(text)
+    fresh.runAndWait()
+    return fresh
+
+
+def _new_engine():
+    """A genuinely new engine.
+
+    pyttsx3.init() hands back a cached one, which would just be the broken
+    engine again, so build it directly and fall back to init() only if that
+    class ever moves.
+    """
+    try:
+        from pyttsx3.engine import Engine
+        return Engine(None, False)
+    except Exception:
+        import pyttsx3
+        return pyttsx3.init()
+
+
 def _run():
     global _available, _error
 
@@ -102,8 +153,7 @@ def _run():
         pass
 
     try:
-        import pyttsx3
-        engine = pyttsx3.init()
+        engine = _new_engine()
     except Exception as e:
         _available = False
         _error = f"{type(e).__name__}: {e}"
@@ -122,12 +172,10 @@ def _run():
 
         if not speaking:
             speaking = True
-            if _pause_mic:
-                _pause_mic()
+            _safely(_pause_mic)
 
         try:
-            engine.say(text)
-            engine.runAndWait()
+            engine = _say_with(engine, text)
             _spoken.append(text)
         except Exception as e:
             # A broken voice must never take the app down, but it must not be
@@ -137,11 +185,12 @@ def _run():
         finally:
             # Only start listening again once there is nothing left to say, so
             # a run of messages does not flap the microphone on and off. This
-            # has to happen even if speaking failed, or the app goes deaf.
+            # has to happen even if speaking failed, or the app goes deaf --
+            # and the hooks are guarded because an exception raised in here
+            # would kill this thread and end speech for the whole session.
             if _queue.empty():
                 speaking = False
-                if _resume_mic:
-                    _resume_mic()
+                _safely(_resume_mic)
 
     if speaking and _resume_mic:
         _resume_mic()

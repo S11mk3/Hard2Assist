@@ -51,6 +51,8 @@ class App:
         self._hint_job = None
         self._pulse = 0.0
         self._listening = False
+        self._last_speech_error = ""
+        self._said_muted = False
 
         self._build_widgets()
 
@@ -93,6 +95,7 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
         self.root.after(100, self._drain)
         self.root.after(PULSE_MS, self._animate)
+        self.root.after(2000, self._watch_speech)
 
     # -- layout ---------------------------------------------------------------
 
@@ -258,6 +261,27 @@ class App:
     def _restore_hint(self):
         self._hint_job = None
         self.hint.set(DEFAULT_HINT)
+
+    def _watch_speech(self):
+        """Say so if the voice stops working.
+
+        Going quietly mute is the worst way for this to fail -- you are left
+        wondering whether it heard you at all.
+        """
+        problem = speech.error()
+        if problem and problem != self._last_speech_error:
+            self._last_speech_error = problem
+            self.log(f"I could not speak that: {problem}", tag="warn")
+
+        if speech.available() and not speech.enabled():
+            if not self._said_muted:
+                self._said_muted = True
+                self.log("Speaking is off. Say 'computer speak' to turn it "
+                         "back on.", tag="dim")
+        else:
+            self._said_muted = False
+
+        self.root.after(2000, self._watch_speech)
 
     # -- running commands -----------------------------------------------------
 
