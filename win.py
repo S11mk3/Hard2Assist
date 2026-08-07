@@ -87,18 +87,31 @@ def windows_of(app):
 
     Matches on window class when the app defines one (explorer's title is just
     the folder you are looking at), otherwise on a title substring.
+
+    Titles are only a guess for anything found in the Start Menu -- the shortcut
+    is named after the product and the window is not -- so when the title finds
+    nothing we ask who owns each window instead. That costs a process lookup per
+    window, which is why it is a fallback and not the first thing we try.
     """
     if not app.window_class and not app.title:
         return []
 
+    windows = visible_windows()
+
     matches = []
-    for hwnd, title, class_name in visible_windows():
+    for hwnd, title, class_name in windows:
         if app.window_class and class_name != app.window_class:
             continue
         if app.title and app.title.lower() not in title.lower():
             continue
         matches.append(hwnd)
-    return matches
+
+    if matches:
+        return matches
+
+    return [hwnd for hwnd, _title, class_name in windows
+            if not (app.window_class and class_name != app.window_class)
+            and app.owns_process(process_of_window(hwnd))]
 
 
 def newest_window_of(app):
@@ -167,3 +180,15 @@ def pid_of_window(hwnd):
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
+
+
+def process_of_window(hwnd):
+    """The image name that owns a window ("opera.exe"), or "" if we cannot see it.
+
+    Windows will not tell an ordinary process about an elevated one, so this
+    comes back empty for anything running as administrator.
+    """
+    try:
+        return psutil.Process(pid_of_window(hwnd)).name()
+    except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
+        return ""
