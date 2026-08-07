@@ -39,7 +39,8 @@ def run_selftest():
     note(f"commands found: {sorted(commands) or 'NONE'}")
 
     for module_name in ("apps", "win", "psutil", "speech_recognition",
-                        "pyttsx3", "pyttsx3.drivers.sapi5", "comtypes"):
+                        "pyttsx3", "pyttsx3.drivers.sapi5", "comtypes",
+                        "pycaw.utils"):
         try:
             __import__(module_name)
             note(f"import {module_name:<24}: ok")
@@ -67,6 +68,10 @@ def run_selftest():
              f"-- {speech.error() or 'no error reported'}")
     else:
         note(f"speech                          : NOT AVAILABLE -- {speech.error()}")
+
+    import audio
+    note(f"volume control                  : "
+         f"{'ok (' + str(audio.level()) + '%)' if audio.available() else 'NOT AVAILABLE'}")
 
     tally = apps.counts()
     note(f"apps                            : {sum(tally.values())} "

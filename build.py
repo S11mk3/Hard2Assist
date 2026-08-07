@@ -49,6 +49,11 @@ OPTIONS = [
     "--hidden-import", "comtypes.stream",
     "--hidden-import", "comtypes.client",
     "--hidden-import", "comtypes.gen",
+
+    # Reached only from a command module, which PyInstaller cannot see.
+    "--hidden-import", "audio",
+    "--hidden-import", "pycaw",
+    "--hidden-import", "pycaw.utils",
 ]
 
 

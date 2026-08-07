@@ -81,8 +81,12 @@ def find(spoken):
 
 
 def names():
-    """Canonical names only -- aliases and misspellings stay hidden from `help`."""
-    return [app.name for app in all_apps()]
+    """Canonical names only -- aliases and misspellings stay hidden from `help`.
+
+    Sorted for reading. The catalogue itself stays in search order, because
+    find() relies on system apps being matched before Start Menu ones.
+    """
+    return sorted(app.name for app in all_apps())
 
 
 def names_of_kind(kind):
