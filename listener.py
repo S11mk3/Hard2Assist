@@ -10,7 +10,7 @@ import time
 
 import speech_recognition as sr
 
-from output import say
+from output import detail, say
 
 PREFIX = "computer"
 
@@ -82,9 +82,9 @@ class Listener:
             # there is nothing it can do until that is sorted out.
             self.on_status("No microphone found")
             say("I could not find a microphone, and I only take voice commands.")
-            say("Plug one in, check it is enabled in Windows sound settings, "
-                "then start Hard2Assist again.")
-            say(f"({e})")
+            detail("Plug one in, check it is enabled in Windows sound settings, "
+                   "then start Hard2Assist again.")
+            detail(f"({e})")
             return
 
         try:
@@ -133,12 +133,13 @@ class Listener:
             except sr.RequestError as e:
                 self.on_status("No connection", transient=True)
                 if not self._warned_offline:
-                    say(f"Cannot reach the speech service: {e}")
-                    say("Speech recognition needs an internet connection.")
+                    say("I can't reach the speech service. "
+                        "Recognition needs an internet connection.")
+                    detail(f"({e})")
                     self._warned_offline = True
                 continue
             except Exception as e:
-                say(f"Something went wrong listening: {e}")
+                detail(f"Something went wrong listening: {e}")
                 continue
 
             self._warned_offline = False

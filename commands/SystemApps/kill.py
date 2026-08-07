@@ -1,10 +1,10 @@
-"""Force an app to stop. Unlike `close`, it does not get to save anything."""
+﻿"""Force an app to stop. Unlike `close`, it does not get to save anything."""
 
 import psutil
 
 import apps
 import win
-from output import announce, say
+from output import detail, say
 
 NAME = "kill"
 TAKES_ARG = True
@@ -22,12 +22,12 @@ def run(argument):
 
     app = apps.find(argument)
     if app is None:
-        announce(f"I don't know an app called {argument}.")
+        say(f"I don't know an app called {argument}.")
         return
 
     if app.protected:
-        announce(f"I won't kill {app.name}")
-        say(f"It is the Windows shell, and killing it would take the taskbar "
+        say(f"I won't kill {app.name}")
+        detail(f"It is the Windows shell, and killing it would take the taskbar "
             f"and desktop with it. Try 'computer close {app.name}' instead.")
         return
 
@@ -38,7 +38,7 @@ def run(argument):
         handles = [newest] if newest else []
 
     if not handles:
-        announce(f"{app.name} does not seem to be open.")
+        say(f"{app.name} does not seem to be open.")
         return
 
     # Several windows can belong to one process, so collect the ids first and
@@ -53,9 +53,9 @@ def run(argument):
         except psutil.NoSuchProcess:
             pass  # already gone, nothing to do
         except psutil.AccessDenied:
-            say(f"Not allowed to kill {app.name} (pid {pid}). "
+            detail(f"Not allowed to kill {app.name} (pid {pid}). "
                 f"It may need an administrator.")
 
     if killed:
         process = "process" if killed == 1 else "processes"
-        announce(f"Killed {killed} {app.name} {process}")
+        say(f"Killed {killed} {app.name} {process}")

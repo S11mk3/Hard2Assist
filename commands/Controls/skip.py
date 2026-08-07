@@ -1,7 +1,7 @@
-"""Next and previous track."""
+﻿"""Next and previous track."""
 
 import win
-from output import announce
+from output import say
 
 NAME = "next"
 TAKES_ARG = False
@@ -11,4 +11,4 @@ HELP = "next         -- skip to the next track ('back' for the previous one)"
 
 def run():
     win.tap_key(win.VK_MEDIA_NEXT)
-    announce("Next track")
+    say("Next track")

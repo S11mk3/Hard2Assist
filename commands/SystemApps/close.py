@@ -1,8 +1,8 @@
-"""Ask an app to close, politely."""
+﻿"""Ask an app to close, politely."""
 
 import apps
 import win
-from output import announce, say
+from output import detail, say
 
 NAME = "close"
 TAKES_ARG = True
@@ -26,7 +26,7 @@ def run(argument):
 
     app = apps.find(argument)
     if app is None:
-        announce(f"I don't know an app called {argument}.")
+        say(f"I don't know an app called {argument}.")
         return
 
     if every:
@@ -36,7 +36,7 @@ def run(argument):
         handles = [newest] if newest else []
 
     if not handles:
-        announce(f"{app.name} does not seem to be open.")
+        say(f"{app.name} does not seem to be open.")
         return
 
     closed = 0
@@ -48,13 +48,13 @@ def run(argument):
         except win.AccessDenied:
             denied += 1
         except OSError as e:
-            say(f"Could not close a {app.name} window: {e}")
+            detail(f"Could not close a {app.name} window: {e}")
 
     if closed:
         window = "window" if closed == 1 else "windows"
-        announce(f"Closing {closed} {app.name} {window}")
+        say(f"Closing {closed} {app.name} {window}")
 
     if denied:
-        announce(f"Windows won't let me close {app.name}")
-        say(f"It runs as administrator and Hard2Assist does not. Restart "
+        say(f"Windows won't let me close {app.name}")
+        detail(f"It runs as administrator and Hard2Assist does not. Restart "
             f"Hard2Assist as administrator to control it.")

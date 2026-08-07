@@ -1,8 +1,8 @@
-"""How much disk space is left."""
+﻿"""How much disk space is left."""
 
 import psutil
 
-from output import announce, say
+from output import detail, say
 
 NAME = "disk"
 TAKES_ARG = False
@@ -27,11 +27,11 @@ def run():
         reported.append((drive, free, total, usage.percent))
 
     if not reported:
-        announce("I could not read any drives.")
+        say("I could not read any drives.")
         return
 
     first = reported[0]
-    announce(f"{first[0]} has {round(first[1])} gigabytes free")
+    say(f"{first[0]} has {round(first[1])} gigabytes free")
 
     for drive, free, total, percent in reported:
-        say(f"  {drive}  {free:.0f} GB free of {total:.0f} GB  ({percent:.0f}% used)")
+        detail(f"  {drive}  {free:.0f} GB free of {total:.0f} GB  ({percent:.0f}% used)")

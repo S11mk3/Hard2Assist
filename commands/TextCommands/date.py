@@ -1,8 +1,8 @@
-"""What day it is."""
+﻿"""What day it is."""
 
 from datetime import datetime
 
-from output import announce
+from output import say
 
 NAME = "date"
 TAKES_ARG = False
@@ -12,4 +12,4 @@ HELP = "date         -- what day it is"
 
 def run():
     now = datetime.now()
-    announce(f"It's {now.strftime('%A, %B %#d')}")
+    say(f"It's {now.strftime('%A, %B %#d')}")

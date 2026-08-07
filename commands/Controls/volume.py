@@ -1,7 +1,7 @@
-"""Turn the volume up and down."""
+﻿"""Turn the volume up and down."""
 
 import win
-from output import announce
+from output import say
 
 NAME = "volume"
 TAKES_ARG = True
@@ -19,19 +19,19 @@ def run(argument):
 
     if what.startswith(("up", "higher", "louder", "increase")):
         win.tap_key(win.VK_VOLUME_UP, STEPS)
-        announce("Volume up")
+        say("Volume up")
 
     elif what.startswith(("down", "lower", "quieter", "decrease")):
         win.tap_key(win.VK_VOLUME_DOWN, STEPS)
-        announce("Volume down")
+        say("Volume down")
 
     elif what.startswith(("mute", "unmute", "silence")):
         win.tap_key(win.VK_VOLUME_MUTE)
-        announce("Muted")
+        say("Muted")
 
     elif what.startswith("max"):
         win.tap_key(win.VK_VOLUME_UP, 50)
-        announce("Volume at maximum")
+        say("Volume at maximum")
 
     else:
-        announce("Say volume up, volume down, or volume mute.")
+        say("Say volume up, volume down, or volume mute.")

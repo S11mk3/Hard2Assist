@@ -34,8 +34,10 @@ Say **"computer"**, then what you want.
 | `computer help` | lists everything it knows |
 | `computer stop` | quits |
 
-It **talks back**. Short confirmations only -- it will not read you a list of
-twenty-six apps. Say `computer quiet` to stop it, `computer speak` to start again.
+It **talks back**. Everything short is spoken; long lists are written to the window
+instead, so `computer help` says *"I know 17 commands and 139 apps, they're on screen"*
+rather than reading all of them out. Say `computer quiet` to stop it, `computer speak`
+to start again.
 
 ---
 
@@ -124,7 +126,7 @@ window -- it is just silently mute, or has no commands. This is the only thing t
 Drop a file in any folder under `commands/`:
 
 ```python
-from output import announce
+from output import say
 
 NAME = "greet"
 TAKES_ARG = False
@@ -132,12 +134,15 @@ ALIASES = ("greeting", "great")   # what the recogniser might hear instead
 HELP = "greet        -- say hello"
 
 def run():
-    announce("Hello!")
+    say("Hello!")
 ```
 
 It is picked up next start and `help` lists it automatically. Use `TAKES_ARG = True` and
-`run(argument)` to get the rest of the sentence. `announce()` speaks and writes;
-`say()` only writes.
+`run(argument)` to get the rest of the sentence.
+
+**`say()` writes and speaks. `detail()` only writes.** Speaking is the default so a new
+command is never accidentally silent -- reach for `detail()` only when the output is a
+list or a long explanation nobody would want read aloud.
 
 This works with the built .exe too -- put a `commands` folder next to `Hard2Assist.exe`,
 drop the file in, restart. No rebuild.

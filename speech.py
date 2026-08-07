@@ -21,6 +21,7 @@ _enabled = True
 _pause_mic = None
 _resume_mic = None
 _error = ""
+_spoken = []
 
 START_TIMEOUT = 15
 
@@ -76,6 +77,11 @@ def idle():
     return _queue.empty()
 
 
+def spoken_count():
+    """How many lines have actually made it out of the speaker."""
+    return len(_spoken)
+
+
 def _run():
     global _available, _error
 
@@ -122,8 +128,12 @@ def _run():
         try:
             engine.say(text)
             engine.runAndWait()
-        except Exception:
-            pass  # a broken voice must never take the app down
+            _spoken.append(text)
+        except Exception as e:
+            # A broken voice must never take the app down, but it must not be
+            # invisible either -- a bundle that creates the engine and then
+            # fails to speak would otherwise look like it is working.
+            _error = f"{type(e).__name__}: {e}"
         finally:
             # Only start listening again once there is nothing left to say, so
             # a run of messages does not flap the microphone on and off. This
