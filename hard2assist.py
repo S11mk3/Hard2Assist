@@ -1,79 +1,102 @@
-"""Hard2Assist -- listen for "computer <something>" and do it."""
+"""Hard2Assist -- say "computer <something>" and it does it.
 
-import pyfiglet
-import speech_recognition as sr
+Opens a window by default. Pass --console for a plain terminal version, which
+is handy when something is going wrong and you want to see it happen.
+"""
 
+import os
+import sys
+import tempfile
+
+import listener
 import registry
+from output import say
 
-PREFIX = "computer"
-
-# How long to wait for you to start talking, and how long a single command can
-# run. Without these, listen() blocks forever and the program looks frozen.
-LISTEN_TIMEOUT = 5
-PHRASE_LIMIT = 8
+EXPECTED_COMMANDS = {"open", "close", "kill", "help", "stop"}
 
 
-def handle(commands, text):
-    """Deal with one recognised sentence. Returns registry.STOP to quit."""
-    spoken = text.lower().strip()
+def run_selftest():
+    """Check that a build is complete. Run this after building the .exe.
 
-    # The wake word has to start the sentence, otherwise "I bought a computer
-    # yesterday" would set things off.
-    if not spoken.startswith(PREFIX):
-        return None
+    A .exe that is missing pieces still starts and still opens its window -- it
+    just quietly has no commands, because the command modules are loaded by
+    scanning at runtime and PyInstaller cannot see what they import. This says
+    so plainly instead.
+    """
+    report = []
 
-    utterance = spoken[len(PREFIX):].strip(" ,.")
-    if not utterance:
-        return None
+    def note(text):
+        report.append(str(text))
 
-    print("Command:", utterance)
-    return registry.dispatch(commands, utterance)
+    note(f"frozen        : {getattr(sys, 'frozen', False)}")
+    note(f"roots         : {registry._roots()}")
+
+    commands = registry.load()
+    note(f"commands found: {sorted(commands) or 'NONE'}")
+
+    for module_name in ("apps", "win", "psutil", "speech_recognition"):
+        try:
+            __import__(module_name)
+            note(f"import {module_name:<18}: ok")
+        except Exception as e:
+            note(f"import {module_name:<18}: MISSING ({e})")
+
+    missing = EXPECTED_COMMANDS - set(commands)
+    ok = not missing
+    note("")
+    note("RESULT: ok" if ok else f"RESULT: FAILED, missing {sorted(missing)}")
+
+    text = "\n".join(report)
+
+    # A windowed build has no stdout, so always leave the report on disk too.
+    path = os.path.join(tempfile.gettempdir(), "hard2assist-selftest.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+    if sys.stdout is not None:
+        print(text)
+        print(f"\n(also written to {path})")
+
+    return 0 if ok else 1
+
+
+def run_console():
+    commands = registry.load()
+    if not commands:
+        say("No commands were found, so there is nothing to do.")
+        return
+
+    say("Hard2Assist")
+    say("Commands: " + ", ".join(sorted(commands)))
+
+    def on_command(command):
+        say(f"> {command}")
+        if registry.dispatch(commands, command) is registry.STOP:
+            ears.stop()
+
+    def on_status(text, transient=False):
+        if not transient:          # transient ones would spam the terminal
+            say(text)
+
+    ears = listener.Listener(on_command=on_command, on_status=on_status)
+    ears.run()
 
 
 def main():
-    print(pyfiglet.figlet_format("Hard2Assist"))
+    if "--selftest" in sys.argv:
+        return run_selftest()
 
-    commands = registry.load()
-    if not commands:
-        print("No commands were loaded, so there is nothing to do.")
-        return
-    print("Commands:", ", ".join(sorted(commands)))
+    if "--console" in sys.argv:
+        run_console()
+    else:
+        import gui
+        gui.run()
 
-    recognizer = sr.Recognizer()
-
-    with sr.Microphone() as source:
-        print("Calibrating for background noise, hold on...")
-        recognizer.adjust_for_ambient_noise(source, duration=1)
-
-        print(f"Listening. Say '{PREFIX} help' for what I can do, "
-              f"'{PREFIX} stop' to quit.\n")
-
-        while True:
-            try:
-                audio = recognizer.listen(
-                    source,
-                    timeout=LISTEN_TIMEOUT,
-                    phrase_time_limit=PHRASE_LIMIT,
-                )
-                text = recognizer.recognize_google(audio)
-                print("Heard:", text)
-
-                if handle(commands, text) is registry.STOP:
-                    break
-
-            except sr.WaitTimeoutError:
-                continue  # nobody said anything, just keep listening
-            except sr.UnknownValueError:
-                print("I didn't catch that.")
-            except sr.RequestError as e:
-                print(f"Could not reach the speech service: {e}")
-            except Exception as e:
-                # One bad command should not end the session.
-                print(f"Something went wrong: {e}")
+    return 0
 
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main())
     except KeyboardInterrupt:
-        print("\nExiting.")
+        say("\nExiting.")

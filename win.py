@@ -9,6 +9,8 @@ one can point at somebody else's window.
 import ctypes
 from ctypes import wintypes
 
+import psutil
+
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 
 WM_CLOSE = 0x0010
@@ -97,6 +99,32 @@ def windows_of(app):
             continue
         matches.append(hwnd)
     return matches
+
+
+def newest_window_of(app):
+    """The most recently started window of this app, or None.
+
+    "Most recently started" means the window whose process started last -- each
+    console window, for instance, is its own cmd.exe process. This is what makes
+    `close cmd` shut the one you just opened instead of every one on screen.
+
+    Windows that share a process (explorer's folder windows) have the same start
+    time. EnumWindows returns them top of the Z-order first, so the tie is broken
+    towards the one nearest the front.
+    """
+    handles = windows_of(app)
+    if not handles:
+        return None
+
+    def started_at(hwnd):
+        try:
+            return psutil.Process(pid_of_window(hwnd)).create_time()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return 0.0  # unknown, treat as oldest
+
+    # windows_of preserves EnumWindows order, so an earlier index means nearer
+    # the front. max() keeps the first of equal values, giving us that tiebreak.
+    return max(handles, key=started_at)
 
 
 def close_window(hwnd):
