@@ -1,4 +1,4 @@
-﻿"""Search the web for whatever you just said."""
+"""Search the web for the spoken words."""
 
 import os
 import urllib.parse
@@ -17,8 +17,8 @@ ENGINE = "https://www.google.com/search?q="
 def run(argument):
     words = argument.strip()
 
-    # "search for cats" and "google for cats" both end up here; drop the "for"
-    # so it does not become part of the search.
+    # "search for cats" and "google for cats" both land here; drop the
+    # leading "for" so it does not become part of the query.
     if words.lower().startswith("for "):
         words = words[4:].strip()
 

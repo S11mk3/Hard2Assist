@@ -1,3 +1,11 @@
+"""The Hard2Assist window.
+
+A dark, mostly hands-off window: a pulsing dot that shows whether the app is
+listening, a status line, a hint line, and a log panel that everything the
+commands say or write scrolls into. The microphone runs on a background
+thread; messages cross into the Tk thread through a queue.
+"""
+
 import math
 import os
 import queue
@@ -21,8 +29,8 @@ ICON = "H2A.ico"
 
 DEFAULT_HINT = 'say "computer help" to hear what I can do'
 
-# The listener describes itself in sentences, which suit the console. Up here we
-# want one short word.
+# The listener reports its state in full sentences, which suit the console.
+# The window's state label wants one short word instead.
 STATES = {
     "Listening": "LISTENING",
     "Paused": "PAUSED",
@@ -36,7 +44,7 @@ class App:
         self.root = root
         self.messages = queue.Queue()
 
-        # One command at a time, whichever thread asked for it.
+        # Commands run one at a time, whichever thread asked for one.
         self.command_lock = threading.Lock()
         self._hint_job = None
         self._pulse = 0.0
@@ -46,17 +54,18 @@ class App:
 
         self._build_widgets()
 
-        # Anything a command say()s now lands in our log instead of a console.
+        # Route everything commands say() into the log panel instead of a
+        # console (the built .exe does not have one).
         output.on_message(self.log_from_any_thread)
 
-        # When a command meets a program it has never heard of, it needs a path,
-        # and you cannot say a path out loud. This is where the picker comes in.
+        # When `open` meets a program it has never seen, it needs a file path,
+        # which cannot be dictated -- so the window provides a file picker.
         ask.on_request(self.ask_for_program)
 
         self.commands = registry.load()
         if self.commands:
-            # Something in the log from the start, so the panel does not look
-            # broken before you have said anything.
+            # Put something in the log immediately, so the panel does not look
+            # broken before the first command is spoken.
             tally = apps.counts()
             self.log(f"Ready. {len(self.commands)} commands, "
                      f"{sum(tally.values())} apps "
@@ -70,9 +79,8 @@ class App:
             on_status=self.status_from_any_thread,
         )
 
-        # Talking into its own microphone would make it hear "Closing one
-        # window" and act on the word "close", so it stops listening while it
-        # speaks.
+        # Mute the microphone while speaking, otherwise the app hears its own
+        # replies (e.g. "Closing one window") and acts on the word "close".
         if speech.start():
             speech.on_speaking(self.listener.pause, self.listener.resume)
         else:
@@ -87,7 +95,7 @@ class App:
         self.root.after(PULSE_MS, self._animate)
         self.root.after(2000, self._watch_speech)
 
-    # -- layout ---------------------------------------------------------------
+    # -- layout ----------------------------------------------------------------
 
     def _build_widgets(self):
         self.root.title("Hard2Assist")
@@ -101,7 +109,7 @@ class App:
             bg=theme.BG, fg=theme.DIM,
         ).pack(pady=(16, 0))
 
-        # The pulsing dot: alive and listening, or still and grey.
+        # The pulsing dot: animated while listening, still and grey otherwise.
         self.canvas = tk.Canvas(
             self.root, width=120, height=120, bg=theme.BG,
             highlightthickness=0,
@@ -124,9 +132,9 @@ class App:
 
         tk.Frame(self.root, bg=theme.LINE, height=1).pack(fill="x", padx=22)
 
-        # A plain Text rather than ScrolledText: a scrollbar would be the one
-        # piece of grey Windows chrome in an otherwise dark window, and the log
-        # follows itself anyway.
+        # A plain Text widget rather than ScrolledText: a native scrollbar
+        # would be the only piece of grey Windows chrome in an otherwise dark
+        # window, and the log auto-scrolls to the end anyway.
         self.log_box = tk.Text(
             self.root, wrap="word", state="disabled", font=theme.LOG_FONT,
             bg=theme.PANEL, fg=theme.TEXT, insertbackground=theme.TEXT,
@@ -140,41 +148,43 @@ class App:
         self.log_box.tag_configure("dim", foreground=theme.DIM)
 
     def _set_icon(self):
-        """Title bar and taskbar icon.
+        """Set the title bar and taskbar icon.
 
-        The .exe already carries the icon as a file, but a running window has
-        its own, so it has to be set here too. Inside the bundle the file lives
-        in PyInstaller's unpacked folder.
+        The .exe file carries the icon, but the running window needs it set
+        explicitly as well. Inside the bundle the .ico lives in PyInstaller's
+        unpacked folder (sys._MEIPASS).
         """
         base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         path = os.path.join(base, ICON)
 
         if not os.path.isfile(path):
-            return  # not worth failing over; you just get the default icon
+            # Not worth failing over; the window just gets the default icon.
+            return
 
         try:
-            # default= sets it for the application rather than just this
-            # window, which is what the taskbar reads.
+            # default= applies the icon to the whole application, which is
+            # what the taskbar reads; the second call covers this window.
             self.root.iconbitmap(default=path)
             self.root.iconbitmap(path)
         except tk.TclError:
             pass
 
-    # -- the pulse ------------------------------------------------------------
+    # -- the pulse -------------------------------------------------------------
 
     def _animate(self):
+        """Redraw the dot and ring, then reschedule."""
         centre, base = 60, 13
 
         if self._listening:
             self._pulse += 0.09
-            breathe = (math.sin(self._pulse) + 1) / 2          # 0..1
+            breathe = (math.sin(self._pulse) + 1) / 2  # oscillates 0..1
 
             radius = base + breathe * 3
             self.canvas.itemconfigure(
                 self.dot, fill=theme.blend(theme.ACCENT_DIM, theme.ACCENT, breathe)
             )
 
-            # The ring expands outward and fades into the background.
+            # The ring expands outward while fading into the background.
             ring_radius = base + 6 + breathe * 26
             self.canvas.itemconfigure(
                 self.ring,
@@ -198,7 +208,7 @@ class App:
 
         self.root.after(PULSE_MS, self._animate)
 
-    # -- messages between threads ---------------------------------------------
+    # -- messages between threads ----------------------------------------------
 
     def log_from_any_thread(self, text):
         self.messages.put(("log", text))
@@ -207,7 +217,7 @@ class App:
         self.messages.put(("status", text, transient))
 
     def _drain(self):
-        """Pull whatever the microphone thread has queued into the widgets."""
+        """Move queued messages from the microphone thread into the widgets."""
         try:
             while True:
                 message = self.messages.get_nowait()
@@ -219,9 +229,10 @@ class App:
             pass
         self.root.after(100, self._drain)
 
-    # -- widgets --------------------------------------------------------------
+    # -- widgets ---------------------------------------------------------------
 
     def log(self, text, tag=None):
+        """Append a line to the log panel, colour-coded by content."""
         if tag is None:
             if text.startswith(">"):
                 tag = "command"
@@ -238,6 +249,7 @@ class App:
         self.log_box.configure(state="disabled")
 
     def set_status(self, text, transient=False):
+        """Update the state label, or flash a transient message on the hint line."""
         if transient:
             self.hint.set(text)
             if self._hint_job is not None:
@@ -253,10 +265,10 @@ class App:
         self.hint.set(DEFAULT_HINT)
 
     def _watch_speech(self):
-        """Say so if the voice stops working.
+        """Report it in the log if the voice stops working.
 
-        Going quietly mute is the worst way for this to fail -- you are left
-        wondering whether it heard you at all.
+        Failing silently would leave the user wondering whether the app heard
+        them at all, so speech problems are surfaced as soon as they happen.
         """
         problem = speech.error()
         if problem and problem != self._last_speech_error:
@@ -273,7 +285,7 @@ class App:
 
         self.root.after(2000, self._watch_speech)
 
-    # -- running commands -----------------------------------------------------
+    # -- running commands ------------------------------------------------------
 
     def run_command(self, command):
         """Run one command. Called from the microphone thread."""
@@ -289,11 +301,11 @@ class App:
             self.root.after(0, self.quit)
 
     def ask_for_program(self, name):
-        """Open the file picker and wait for an answer.
+        """Open the file picker and wait for the chosen path.
 
-        Called from the microphone thread, but tkinter dialogs only work on the
-        thread running the window, so the request is handed over with after()
-        and this side waits for the result.
+        Called from the microphone thread, but tkinter dialogs must run on
+        the thread that owns the window -- so the dialog is scheduled with
+        after() and this thread blocks on an event until it is answered.
         """
         answer = {}
         done = threading.Event()
@@ -310,16 +322,16 @@ class App:
 
         self.root.after(0, show)
 
-        # A timeout, so a dialog left open does not wedge the command thread
-        # for the rest of the session.
+        # Time out eventually so a dialog left open forever does not wedge
+        # the command thread for the rest of the session.
         done.wait(timeout=180)
         return answer.get("path") or None
 
     def quit(self):
         self.listener.stop()
         speech.stop()
-        # Drop anything logged from here on. The widgets are going away, and in
-        # the built .exe there is no console to fall back to.
+        # Discard anything logged from here on: the widgets are being torn
+        # down, and the built .exe has no console to fall back to.
         output.on_message(lambda _text: None)
         self.root.destroy()
 

@@ -1,9 +1,9 @@
 """Programs installed on this PC.
 
-Two sources. Everything in the Start Menu is found automatically, so a freshly
-installed program is openable without touching any code. Anything that is not
-there -- a portable exe, something with an odd shortcut name -- you point at
-once with the file picker and it is remembered.
+Two sources. Everything in the Start Menu is discovered automatically, so a
+freshly installed program is openable without touching any code. Anything
+not found there -- a portable exe, a shortcut with an odd name -- the user
+points at once with the file picker, and it is remembered in a JSON file.
 """
 
 import json
@@ -21,9 +21,9 @@ START_MENUS = [
                  r"Microsoft\Windows\Start Menu\Programs"),
 ]
 
-# Start Menu folders are full of things that are not the program: uninstallers,
-# manuals, "visit our website" links. Opening one of those by accident is at
-# best confusing and at worst destructive, so they are left out.
+# Start Menu folders are full of shortcuts that are not the program itself:
+# uninstallers, manuals, "visit our website" links. Launching one of those by
+# accident is confusing at best and destructive at worst, so they are skipped.
 SKIP_WORDS = (
     "uninstall", "readme", "read me", "release notes", "documentation",
     "help", "manual", "license", "licence", "website", "web site",
@@ -40,8 +40,8 @@ def _looks_useful(name):
 def scan():
     """Every Start Menu shortcut, as an App.
 
-    The .lnk itself is what gets launched -- os.startfile follows it, so we never
-    have to work out what it points at.
+    The .lnk file itself is what gets launched -- os.startfile() follows the
+    shortcut, so its target never needs to be resolved here.
     """
     found = {}
 
@@ -60,13 +60,13 @@ def scan():
 
                 key = name.lower()
                 if key in found:
-                    continue  # first one wins
+                    continue  # first occurrence wins
 
                 found[key] = App(
                     name=key,
                     launch=os.path.join(folder, file),
-                    # Best effort: most programs put their name in their window
-                    # title. See the README -- closing these is not guaranteed.
+                    # Best effort: most programs put their name in the window
+                    # title, but closing these is not guaranteed (see README).
                     title=name,
                     kind="installed",
                 )
@@ -82,29 +82,32 @@ def _load_user_file():
         return {}
 
 
-def mine():
-    """Apps you pointed at yourself.
+def _user_app(name, path):
+    """Build the App for a user-picked program.
 
-    These are the reliable ones: we have the actual .exe, so close and kill can
-    match the process by name instead of guessing from a window title.
+    These are the reliable entries: the actual executable is known, so close
+    and kill can match the process by name instead of guessing from a window
+    title.
     """
-    apps = []
-    for name, path in _load_user_file().items():
-        if not isinstance(path, str):
-            continue
-        process = os.path.basename(path)
-        apps.append(App(
-            name=name.lower(),
-            launch=path,
-            title=os.path.splitext(process)[0],
-            process=process if process.lower().endswith(".exe") else "",
-            kind="mine",
-        ))
-    return apps
+    process = os.path.basename(path)
+    return App(
+        name=name.lower().strip(),
+        launch=path,
+        title=os.path.splitext(process)[0],
+        process=process if process.lower().endswith(".exe") else "",
+        kind="mine",
+    )
+
+
+def mine():
+    """Apps the user pointed at themselves, loaded from the JSON file."""
+    return [_user_app(name, path)
+            for name, path in _load_user_file().items()
+            if isinstance(path, str)]
 
 
 def remember(name, path):
-    """Save an app you picked, so you are only asked once."""
+    """Save a picked app to the JSON file, so the user is only asked once."""
     name = name.lower().strip()
     entries = _load_user_file()
     entries[name] = path
@@ -113,11 +116,4 @@ def remember(name, path):
     with open(USER_FILE, "w", encoding="utf-8") as f:
         json.dump(entries, f, indent=2)
 
-    return App(
-        name=name,
-        launch=path,
-        title=os.path.splitext(os.path.basename(path))[0],
-        process=(os.path.basename(path)
-                 if path.lower().endswith(".exe") else ""),
-        kind="mine",
-    )
+    return _user_app(name, path)

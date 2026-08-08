@@ -1,4 +1,4 @@
-﻿"""What day it is."""
+"""Say what day it is."""
 
 from datetime import datetime
 

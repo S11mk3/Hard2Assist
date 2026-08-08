@@ -1,4 +1,4 @@
-﻿"""Launch anything -- a Windows app, an installed program, or a website."""
+"""Launch anything: a Windows app, an installed program, or a website."""
 
 import os
 
@@ -21,9 +21,9 @@ def run(argument):
         if app is None:
             return
 
-    # os.startfile goes through the Windows shell, which is what makes this work
-    # for everything we throw at it: plain exes, .msc consoles, the ms-settings:
-    # URI, Start Menu .lnk shortcuts and https:// addresses alike.
+    # os.startfile() goes through the Windows shell, which is what makes one
+    # code path work for everything: plain exes, .msc consoles, ms-settings:
+    # URIs, Start Menu .lnk shortcuts and https:// addresses alike.
     try:
         os.startfile(app.launch)
     except OSError as e:
@@ -35,12 +35,12 @@ def run(argument):
 
 
 def _ask_where_it_is(wanted):
-    """Not in the catalogue -- get you to point at it once, then remember it."""
+    """Unknown program: have the user point at it once, then remember it."""
     say(f"I don't know {wanted}. Pick its program file.")
 
     path = ask.for_program(wanted)
     if not path:
-        detail(f"Never mind. Say 'computer help' to see what I do know.")
+        detail("Never mind. Say 'computer help' to see what I do know.")
         return None
 
     if not os.path.isfile(path):

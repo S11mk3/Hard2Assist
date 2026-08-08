@@ -1,13 +1,15 @@
 """Apps built into Windows.
 
-These are hand-written because they need details we cannot discover: the window
-title to find them by, and which ones must never be killed.
+Listed by hand because they need details that cannot be discovered
+automatically: the window title to find them by, and which ones must
+never be killed.
 """
 
 from .app import App
 
-# Aliases are lowercase. The odd-looking ones ("task manger", "disc managment")
-# are not typos in this file -- they are what speech recognition actually returns.
+# Aliases are lowercase. The odd-looking entries ("task manger",
+# "disc managment") are not typos -- they are what speech recognition
+# actually returns for those names.
 APPS = [
     App("calculator", "calc", "Calculator", ("calc",)),
     App("notepad", "notepad", "Notepad"),

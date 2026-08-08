@@ -1,8 +1,8 @@
-"""Websites.
+"""Websites the user can open by name.
 
-os.startfile opens a URL as happily as a program, so a website needs no special
-command -- "computer open youtube" goes through the same `open` as everything
-else. Add a line here and it works.
+os.startfile() opens a URL exactly like a program, so websites need no
+special command -- "computer open youtube" goes through the same `open`
+as everything else. Add a line here and it works.
 """
 
 from .app import App

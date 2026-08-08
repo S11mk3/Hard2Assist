@@ -1,4 +1,4 @@
-﻿"""Stop Hard2Assist talking back, or start again."""
+"""Stop Hard2Assist speaking its replies."""
 
 import speech
 from output import detail, say
@@ -14,6 +14,7 @@ def run():
         detail("I have no voice on this PC anyway.")
         return
 
-    # Say goodbye before going quiet, or the confirmation never gets out.
+    # Confirm before disabling speech, or the confirmation itself would
+    # never be heard.
     say("Going quiet")
     speech.set_enabled(False)

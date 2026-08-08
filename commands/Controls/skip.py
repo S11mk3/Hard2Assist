@@ -1,4 +1,4 @@
-﻿"""Next and previous track."""
+"""Skip to the next track."""
 
 import win
 from output import say

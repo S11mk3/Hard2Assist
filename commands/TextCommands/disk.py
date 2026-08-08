@@ -1,4 +1,4 @@
-﻿"""How much disk space is left."""
+"""Report how much disk space is free."""
 
 import psutil
 
@@ -14,8 +14,8 @@ def run():
     reported = []
 
     for part in psutil.disk_partitions(all=False):
-        # Skip anything with no disc in it -- an empty card reader or DVD drive
-        # raises rather than reporting zero.
+        # Skip drives with no media in them: an empty card reader or DVD
+        # drive raises here instead of reporting zero.
         try:
             usage = psutil.disk_usage(part.mountpoint)
         except OSError:
@@ -30,6 +30,7 @@ def run():
         say("I could not read any drives.")
         return
 
+    # Speak only the primary drive; the full per-drive breakdown is written.
     first = reported[0]
     say(f"{first[0]} has {round(first[1])} gigabytes free")
 
