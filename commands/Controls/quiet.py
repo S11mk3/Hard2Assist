@@ -6,6 +6,12 @@ from output import detail, say
 NAME = "quiet"
 TAKES_ARG = False
 ALIASES = ("silent", "shush")
+
+# "stop talking" has to be listed here rather than left to the word scan:
+# it opens with the name of the `stop` command, so without this it quits
+# Hard2Assist instead of silencing it.
+PHRASES = ("stop talking", "stop speaking", "be quiet", "shut up",
+           "stop the voice")
 HELP = "quiet        -- stop speaking replies ('speak' turns it back on)"
 
 

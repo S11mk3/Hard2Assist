@@ -6,6 +6,8 @@ from output import detail, say
 NAME = "speak"
 TAKES_ARG = False
 ALIASES = ("speech", "talk", "voice")
+PHRASES = ("start talking", "start speaking", "talk again", "speak again",
+           "you can talk")
 HELP = "speak        -- start speaking replies again"
 
 
