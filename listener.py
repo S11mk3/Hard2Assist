@@ -20,20 +20,19 @@ LISTEN_TIMEOUT = 1
 PHRASE_LIMIT = 8
 
 
-def strip_prefix(text, required):
+def strip_prefix(text):
     """Extract the command from an utterance.
 
     Spoken input must start with the wake word so that ordinary conversation
-    ("I bought a computer yesterday") does not trigger commands. When
-    ``required`` is False the prefix is optional, which suits typed input.
-    Returns the command text, or None if the wake word was required and absent.
+    ("I bought a computer yesterday") does not trigger commands. Returns the
+    command text, or None when the wake word is absent.
     """
     spoken = text.lower().strip()
 
     if spoken.startswith(PREFIX):
         return spoken[len(PREFIX):].strip(" ,.")
 
-    return None if required else spoken
+    return None
 
 
 class Listener:
@@ -47,6 +46,11 @@ class Listener:
         self._active = threading.Event()
         self._active.set()
 
+        # True only while the microphone loop is actually running. pause() and
+        # resume() fire around every spoken reply, so without this a PC with no
+        # microphone would still end up reporting "Listening".
+        self._running = False
+
         self._warned_offline = False
 
     # -- control, called from other threads -----------------------------------
@@ -54,20 +58,18 @@ class Listener:
     def pause(self):
         """Stop capturing audio until resume() is called."""
         self._active.clear()
-        self.on_status("Paused")
+        if self._running:
+            self.on_status("Paused")
 
     def resume(self):
         """Start capturing audio again after pause()."""
         self._active.set()
-        self.on_status("Listening")
+        if self._running:
+            self.on_status("Listening")
 
     def stop(self):
         """Shut the loop down; run() returns shortly after."""
         self._stop.set()
-
-    @property
-    def paused(self):
-        return not self._active.is_set()
 
     # -- the loop --------------------------------------------------------------
 
@@ -101,7 +103,13 @@ class Listener:
                 )
 
                 self.on_status("Listening")
-                self._loop(recognizer, source)
+                self._running = True
+                try:
+                    self._loop(recognizer, source)
+                finally:
+                    # Cleared before the handler below reports, so that the
+                    # speech pause hooks cannot overwrite a failure message.
+                    self._running = False
         except Exception as e:
             self.on_status("Microphone stopped")
             say(f"The microphone stopped working: {e}")
@@ -147,6 +155,6 @@ class Listener:
             self._warned_offline = False
             self.on_status(f"Heard: {text}", transient=True)
 
-            command = strip_prefix(text, required=True)
+            command = strip_prefix(text)
             if command:
                 self.on_command(command)

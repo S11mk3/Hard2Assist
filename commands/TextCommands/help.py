@@ -15,6 +15,14 @@ HELP = "help         -- show this list"
 COLUMNS = 3
 WIDTH = 24
 
+# The gap is joined between columns rather than padded into them. Start Menu
+# names run far past WIDTH ("windows defender firewall with advanced
+# security"), and ljust() leaves those untouched -- padding alone would run
+# them straight into the next name with no space at all. Sizing the columns
+# to the longest name instead would leave one narrow column of whitespace,
+# so an overlong name simply pushes its own row wider.
+GAP = "  "
+
 
 def run():
     commands = registry.load()
@@ -33,6 +41,6 @@ def run():
     names = apps.names()
     for i in range(0, len(names), COLUMNS):
         row = names[i:i + COLUMNS]
-        detail("  " + "".join(name.ljust(WIDTH) for name in row).rstrip())
+        detail("  " + GAP.join(name.ljust(WIDTH) for name in row).rstrip())
 
     detail("")

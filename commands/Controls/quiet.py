@@ -5,7 +5,7 @@ from output import detail, say
 
 NAME = "quiet"
 TAKES_ARG = False
-ALIASES = ("silent", "shush", "mute yourself", "stop talking")
+ALIASES = ("silent", "shush")
 HELP = "quiet        -- stop speaking replies ('speak' turns it back on)"
 
 
