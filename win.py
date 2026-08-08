@@ -7,6 +7,7 @@ handles, so a stored one can end up pointing at an unrelated window.
 """
 
 import ctypes
+import os
 from ctypes import wintypes
 
 import psutil
@@ -247,3 +248,16 @@ def process_of_window(hwnd):
         return psutil.Process(pid_of_window(hwnd)).name()
     except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
         return ""
+
+
+def foreground_is_ours():
+    """Whether the window in front belongs to this process.
+
+    Backs the "only listen while I'm in focus" setting. Comparing process ids
+    rather than a remembered handle covers every window the app owns -- the
+    main window, the file picker, a message box -- without tracking any of them.
+    """
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return False
+    return pid_of_window(hwnd) == os.getpid()

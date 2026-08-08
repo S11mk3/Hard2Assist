@@ -9,6 +9,10 @@ and it opens programs and websites, closes windows, controls volume and media pl
 and answers questions about your PC — battery, time, disk space, CPU load — out loud.
 It ships as a single `.exe` with everything packed inside, so there is nothing to install.
 
+The first time you run it, it talks you through a short setup out loud — pick your own
+wake word instead of "computer", and decide whether it listens all the time or only
+while its window is in focus.
+
 <img src="docs/window.png" alt="The Hard2Assist window, listening" width="560">
 
 </div>
@@ -71,6 +75,7 @@ you want:
 | `computer volume up` | louder. `down` and `mute` too |
 | `computer search how to cook rice` | opens the results in your browser |
 | `computer help` | lists everything it knows |
+| `computer customize` | change the wake word and how it listens |
 | `computer stop` | quits |
 
 Every command confirms what it did, and the log keeps the whole conversation:
@@ -81,8 +86,24 @@ Every command confirms what it did, and the log keeps the whole conversation:
 
 A few things worth knowing while you use it:
 
+- **It sets itself up by talking to you.** On the very first run it asks two questions
+  out loud, explains each one, reads your answer back, and waits for you to confirm it
+  before saving. Say `computer customize` to go through it again, and say **keep** to
+  leave any single answer alone. If it mishears three times it keeps the current value,
+  says so, and moves on — a bad microphone costs you a setting, never the whole app.
+
+  Your answers live in `%APPDATA%\Hard2Assist\settings.json`. Delete that file to be
+  asked again from scratch.
+
+  - **Your wake word.** Any single word of three letters or more. Pick `jarvis` and it
+    answers to `jarvis open notepad`, and to nothing else.
+  - **When it listens.** *Always* is hands free but the microphone is live whenever the
+    app is running. *Only when in focus* means it ignores everything until you click its
+    window — more private, but you have to click first. The window says **NOT IN FOCUS**
+    while it is deliberately ignoring you, so it never looks broken.
+
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 15 commands and 140 apps, they're on screen"*
+  instead, so `computer help` says *"I know 16 commands and 140 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -174,6 +195,8 @@ gui.py              the window
 theme.py            colours and fonts, all in one place
 listener.py         the microphone loop
 speech.py           the voice
+settings.py         what the user chose, saved between runs
+wizard.py           the spoken setup conversation
 registry.py         finds commands, works out which one you meant
 output.py           say() writes and speaks, detail() only writes
 ask.py              asking you for a file mid-command
@@ -184,7 +207,7 @@ build.py            builds the .exe
 commands/
   TextCommands/     answers      help time date battery status disk
   AppCommands/      acting       open focus close kill
-  Controls/         the PC       volume quiet speak stop
+  Controls/         the PC       volume quiet speak stop customize
   Web/              online       search
 
 apps/
@@ -208,4 +231,8 @@ apps/
 - **Closing Start Menu programs is best-effort.** They are found by window title, which
   does not always match the shortcut name. Programs you pick yourself are matched by
   their process and close reliably. Opening always works.
-- **Speech needs the internet.** There is no offline recognition.
+- **Speech needs the internet.** Listening goes to Google's free speech API, so
+  Hard2Assist does not work offline. This is deliberate: an offline recogniser accurate
+  enough to be worth using costs far more in size and accuracy than it saves. The voice
+  that answers you is Windows' own and never leaves your PC — it is only the listening
+  that needs a connection.

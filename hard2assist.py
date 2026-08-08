@@ -9,6 +9,7 @@ import sys
 import listener
 import registry
 import speech
+import wizard
 from output import detail, say
 
 
@@ -35,7 +36,13 @@ def run_console():
         if not transient:
             detail(text)
 
-    ears = listener.Listener(on_command=on_command, on_status=on_status)
+    # No may_listen gate: console mode has no window, so there is nothing for
+    # "only listen while in focus" to mean and it always listens.
+    ears = listener.Listener(
+        on_command=on_command,
+        on_status=on_status,
+        on_ready=wizard.on_ready,
+    )
 
     # Pause the microphone while speaking so the assistant does not pick up
     # and react to its own voice.
