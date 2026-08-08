@@ -6,7 +6,7 @@ from output import say
 
 NAME = "battery"
 TAKES_ARG = False
-ALIASES = ("batery", "batteries", "power level")
+ALIASES = ("batery", "batteries")
 HELP = "battery      -- how much charge is left"
 
 

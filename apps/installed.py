@@ -8,6 +8,7 @@ points at once with the file picker, and it is remembered in a JSON file.
 
 import json
 import os
+import re
 
 from .app import App
 
@@ -27,14 +28,21 @@ START_MENUS = [
 SKIP_WORDS = (
     "uninstall", "readme", "read me", "release notes", "documentation",
     "help", "manual", "license", "licence", "website", "web site",
-    "what's new", "whats new", "support", "报告", "eula", "changelog",
-    "repair", "remove ", "setup", "installer",
+    "what's new", "whats new", "support", "eula", "changelog",
+    "repair", "remove", "setup", "installer",
+)
+
+# Matched as whole words, plus an optional plural -- not as substrings.
+# "Revo Uninstaller" is a real program somebody installed on purpose, and a
+# plain substring test loses it to the "uninstall" entry, while still needing
+# to drop "Uninstall Revo Uninstaller" right next to it in the same folder.
+_SKIP = re.compile(
+    "|".join(rf"\b{re.escape(word)}s?\b" for word in SKIP_WORDS), re.IGNORECASE
 )
 
 
 def _looks_useful(name):
-    lowered = name.lower()
-    return not any(word in lowered for word in SKIP_WORDS)
+    return _SKIP.search(name) is None
 
 
 def scan():

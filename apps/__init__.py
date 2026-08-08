@@ -14,7 +14,6 @@ so that manually correcting a bad match takes priority.
 
 import difflib
 
-from .app import App
 from . import installed, system, websites
 
 _catalogue = None

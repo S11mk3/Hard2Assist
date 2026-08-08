@@ -5,7 +5,7 @@ from output import say
 
 NAME = "stop"
 TAKES_ARG = False
-ALIASES = ("stopp", "quit", "exit", "shut down yourself", "goodbye")
+ALIASES = ("stopp", "quit", "exit", "goodbye")
 HELP = "stop         -- quit Hard2Assist"
 
 

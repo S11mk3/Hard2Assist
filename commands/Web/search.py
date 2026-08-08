@@ -7,7 +7,7 @@ from output import detail, say
 
 NAME = "search"
 TAKES_ARG = True
-ALIASES = ("google", "search for", "look up", "surge")
+ALIASES = ("google", "surge")
 HELP = "search <words> -- search the web"
 EXAMPLE = "search how to cook rice"
 

@@ -35,20 +35,6 @@ def _endpoint():
     return _local.endpoint
 
 
-def available():
-    return _endpoint() is not None
-
-
-def level():
-    """Current volume as 0-100, or None if it cannot be read."""
-    endpoint = _endpoint()
-    if endpoint is None:
-        return None
-    try:
-        return round(endpoint.GetMasterVolumeLevelScalar() * 100)
-    except Exception:
-        return None
-
 
 def set_level(percent):
     """Set the volume. Returns the resulting level, or None on failure."""

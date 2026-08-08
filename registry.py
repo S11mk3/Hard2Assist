@@ -5,11 +5,15 @@ A command module is any .py file under commands/<group>/ that defines:
     NAME      -- the word the user says
     TAKES_ARG -- True if the rest of the sentence is passed to run()
     HELP      -- one line shown by the `help` command
-    ALIASES   -- optional; words the recogniser commonly returns instead
+    ALIASES   -- optional; single words the recogniser commonly returns
+                 instead. Only the first word of an utterance selects a
+                 command, so a multi-word alias could never match.
     run()     -- run(arg) if TAKES_ARG, otherwise run()
 
 Commands are registered purely by their presence on disk: adding one means
-dropping a file into the folder, with no central list to update.
+dropping a file into the folder, with no central list to update. Files whose
+name starts with an underscore are skipped, so a group can keep shared helpers
+alongside its commands.
 """
 
 import difflib
@@ -57,7 +61,7 @@ def load():
         pattern = os.path.join(root, "commands", "*", "*.py")
 
         for path in sorted(glob.glob(pattern)):
-            if os.path.basename(path).startswith("__"):
+            if os.path.basename(path).startswith("_"):
                 continue
 
             module = _import_file(path)
@@ -86,6 +90,11 @@ def _build_aliases(commands):
 
     Aliases absorb consistent recognition errors -- for example, Google's
     recogniser returns "clothes" for "close" far more often than not.
+
+    They must be single words. dispatch() matches on the first word alone,
+    so an alias like "stop talking" would never be reached -- worse, its
+    first word can belong to another command, which is exactly what made
+    "stop talking" quit the app instead of silencing it.
     """
     global _aliases
     _aliases = {}
