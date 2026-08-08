@@ -9,7 +9,7 @@ LINE = "#1b2027"        # hairline dividers
 
 ACCENT = "#22d3ee"      # cyan -- the app is alive and listening
 ACCENT_DIM = "#0e7490"  # cyan, faded, for the outer pulse
-TEXT = "#e8eef4"        # white-ish, normal text
+TEXT = "#33ff00"        # normal text
 DIM = "#6b7683"         # grey, hints and less important lines
 WARN = "#f59e0b"        # amber, something did not work
 

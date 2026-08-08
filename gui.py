@@ -1,13 +1,3 @@
-"""The Hard2Assist window.
-
-Voice only -- there is nothing to click and nothing to type. The window shows
-what it is doing and what it heard. Close it with the X, or say "computer stop".
-
-Two threads: this one runs tkinter, and a background one runs the microphone.
-They only talk through a queue -- tkinter is not safe to touch from another
-thread, and the microphone loop would otherwise be calling straight into it.
-"""
-
 import math
 import os
 import queue
@@ -24,7 +14,7 @@ import registry
 import speech
 import theme
 
-WINDOW_SIZE = "520x460"
+WINDOW_SIZE = "800x600"
 HINT_CLEAR_MS = 4000
 PULSE_MS = 50
 ICON = "H2A.ico"
