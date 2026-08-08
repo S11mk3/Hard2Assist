@@ -10,6 +10,7 @@ NAME = "kill"
 TAKES_ARG = True
 ALIASES = ("kil", "keel", "killed")
 HELP = "kill <app>   -- force an app to stop, without saving ('kill all <app>' for every one)"
+EXAMPLE = "kill notepad"
 
 
 def run(argument):

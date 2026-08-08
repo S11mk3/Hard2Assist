@@ -12,6 +12,7 @@ TAKES_ARG = True
 ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
 
 HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"
+EXAMPLE = "close notepad"
 
 
 def run(argument):

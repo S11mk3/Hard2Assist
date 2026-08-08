@@ -59,6 +59,7 @@ you want:
 | `computer open notepad` | launches an app, a program, or a website |
 | `computer open obs studio` | opens anything in your Start Menu — no setup |
 | `computer open youtube` | opens the site in your browser |
+| `computer focus notepad` | brings it to the front, even if it was minimised |
 | `computer close notepad` | closes it, letting it save first |
 | `computer kill notepad` | forces it to stop |
 | `computer time` | 🔊 *"It's 8:02 pm"* |
@@ -81,7 +82,7 @@ Every command confirms what it did, and the log keeps the whole conversation:
 A few things worth knowing while you use it:
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 14 commands and 139 apps, they're on screen"*
+  instead, so `computer help` says *"I know 15 commands and 140 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -182,7 +183,7 @@ build.py            builds the .exe
 
 commands/
   TextCommands/     answers      help time date battery status disk
-  SystemApps/       acting       open close kill
+  AppCommands/      acting       open focus close kill
   Controls/         the PC       volume quiet speak stop
   Web/              online       search
 
@@ -201,6 +202,9 @@ apps/
   administrator. Windows will not let a normal program send window messages to one, so
   `close` reports that it was refused rather than pretending. `kill` usually still
   works. Run Hard2Assist as administrator to `close` them.
+- **Focus can be refused.** Windows does not let a background program take the
+  foreground in every situation. When it refuses, `focus` says so rather than
+  pretending, and the app's taskbar button flashes instead.
 - **Closing Start Menu programs is best-effort.** They are found by window title, which
   does not always match the shortcut name. Programs you pick yourself are matched by
   their process and close reliably. Opening always works.

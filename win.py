@@ -12,9 +12,14 @@ from ctypes import wintypes
 import psutil
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 WM_CLOSE = 0x0010
 ERROR_ACCESS_DENIED = 5
+
+# Restore puts a minimised window back at the size the user last gave it,
+# rather than maximising it the way SW_SHOWMAXIMIZED would.
+SW_RESTORE = 9
 
 # Callback type for EnumWindows, which passes each top-level window handle
 # to a function we supply.
@@ -42,6 +47,22 @@ user32.GetWindowThreadProcessId.argtypes = [
     wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
 ]
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsIconic.restype = wintypes.BOOL
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
+user32.BringWindowToTop.argtypes = [wintypes.HWND]
+user32.BringWindowToTop.restype = wintypes.BOOL
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.SetForegroundWindow.restype = wintypes.BOOL
+user32.GetForegroundWindow.argtypes = []
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.AttachThreadInput.argtypes = [
+    wintypes.DWORD, wintypes.DWORD, wintypes.BOOL
+]
+user32.AttachThreadInput.restype = wintypes.BOOL
+kernel32.GetCurrentThreadId.argtypes = []
+kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 
 class AccessDenied(Exception):
@@ -155,6 +176,42 @@ def close_window(hwnd):
     if ctypes.get_last_error() == ERROR_ACCESS_DENIED:
         raise AccessDenied
     raise OSError(ctypes.WinError(ctypes.get_last_error()))
+
+
+def focus_window(hwnd):
+    """Bring a window to the front, restoring it if it was minimised.
+
+    Windows only lets the process that already owns the foreground hand it
+    away, so a background app calling SetForegroundWindow by itself usually
+    just flashes the taskbar button instead. Attaching to the foreground
+    window's input queue first makes Windows treat the request as coming
+    from that thread, which is the long-standing way around this.
+
+    Returns True only if the window really ended up in front, so the caller
+    can report a refusal rather than claim a switch that did not happen.
+    """
+    foreground = user32.GetForegroundWindow()
+    if foreground == hwnd and not user32.IsIconic(hwnd):
+        return True
+
+    ours = kernel32.GetCurrentThreadId()
+    theirs = user32.GetWindowThreadProcessId(foreground, None)
+
+    # Nothing to attach to when there is no foreground window, or when it is
+    # already ours. AttachThreadInput fails if both ids are the same.
+    attached = (theirs and theirs != ours
+                and user32.AttachThreadInput(ours, theirs, True))
+
+    try:
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+    finally:
+        if attached:
+            user32.AttachThreadInput(ours, theirs, False)
+
+    return user32.GetForegroundWindow() == hwnd
 
 
 # Volume virtual-key codes. Windows treats these as keystrokes from a keyboard
