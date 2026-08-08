@@ -71,6 +71,23 @@ def speak(text):
         _queue.put(text)
 
 
+def wait(timeout=60):
+    """Block until everything queued so far has been spoken.
+
+    The setup conversation needs this: it must finish asking a question before
+    it starts listening for the answer, or it hears its own voice. speak() only
+    queues, so without waiting the two would overlap.
+
+    Works by queueing a marker behind the text and waiting for the speech
+    thread to reach it -- FIFO order means everything ahead of it is done.
+    """
+    if not enabled():
+        return
+    reached = threading.Event()
+    _queue.put(reached)
+    reached.wait(timeout)
+
+
 def stop():
     """Ask the speech thread to finish and exit."""
     _queue.put(None)
@@ -114,28 +131,33 @@ def _run():
 
     speaking = False
     while True:
-        text = _queue.get()
+        item = _queue.get()
 
-        if text is None:
+        if item is None:
             break
 
-        if not speaking:
-            speaking = True
-            _safely(_pause_mic)
+        if isinstance(item, threading.Event):
+            # A wait() marker rather than something to say. Reaching it means
+            # every line queued ahead of it has already been spoken.
+            item.set()
+        else:
+            if not speaking:
+                speaking = True
+                _safely(_pause_mic)
 
-        try:
-            voice = _speak_once(voice, text)
-        except Exception as e:
-            # A broken voice must never crash the app, but it must not fail
-            # invisibly either; the GUI polls error() and reports it.
-            _error = f"{type(e).__name__}: {e}"
-        finally:
-            # Resume the microphone only once the queue is empty, so a run of
-            # messages does not toggle it on and off between each line. This
-            # runs even when speaking failed -- otherwise the app stays deaf.
-            if _queue.empty():
-                speaking = False
-                _safely(_resume_mic)
+            try:
+                voice = _speak_once(voice, item)
+            except Exception as e:
+                # A broken voice must never crash the app, but it must not
+                # fail invisibly either; the GUI polls error() and reports it.
+                _error = f"{type(e).__name__}: {e}"
+
+        # Resume the microphone only once the queue is empty, so a run of
+        # messages does not toggle it on and off between each line. Outside the
+        # try above, so a failed line still un-deafens the app.
+        if speaking and _queue.empty():
+            speaking = False
+            _safely(_resume_mic)
 
     _safely(_resume_mic)
 

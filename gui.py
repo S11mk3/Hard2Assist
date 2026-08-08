@@ -19,8 +19,11 @@ import ask
 import listener
 import output
 import registry
+import settings
 import speech
 import theme
+import win
+import wizard
 
 WINDOW_SIZE = "800x600"
 HINT_CLEAR_MS = 4000
@@ -34,6 +37,7 @@ DEFAULT_HINT = 'say "computer help" to hear what I can do'
 STATES = {
     "Listening": "LISTENING",
     "Paused": "PAUSED",
+    "Not in focus": "NOT IN FOCUS",
     "No microphone found": "NO MICROPHONE",
     "Microphone stopped": "MIC STOPPED",
 }
@@ -77,6 +81,8 @@ class App:
         self.listener = listener.Listener(
             on_command=self.run_command,
             on_status=self.status_from_any_thread,
+            on_ready=wizard.on_ready,
+            may_listen=self.may_listen,
         )
 
         # Mute the microphone while speaking, otherwise the app hears its own
@@ -286,6 +292,16 @@ class App:
         self.root.after(2000, self._watch_speech)
 
     # -- running commands ------------------------------------------------------
+
+    def may_listen(self):
+        """Whether the 'listen only while in focus' setting is satisfied.
+
+        Read live rather than captured at startup, so changing it through
+        `customize` takes effect straight away.
+        """
+        if settings.get("listen_when") == "always":
+            return True
+        return win.foreground_is_ours()
 
     def run_command(self, command):
         """Run one command. Called from the microphone thread."""
