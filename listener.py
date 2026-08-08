@@ -5,12 +5,15 @@ the main thread. Both receive recognised commands through the same callback
 interface, so the listening behaviour is identical in either mode.
 """
 
+import os
+import re
 import threading
 import time
 
 import speech_recognition as sr
 
 import settings
+import speech
 from output import detail, say
 
 # A short listen timeout keeps the loop cycling frequently, so a pause or
@@ -55,6 +58,21 @@ def strip_prefix(text, prefix):
         return spoken[len(prefix):].strip(" ,.")
 
     return None
+
+
+def _greeting():
+    """The hello spoken at launch.
+
+    Uses the Windows account name when it reads like a name. Accounts are
+    also called things like "marko-kg102", and being greeted by a login is
+    worse than not being greeted by name at all.
+    """
+    name = os.environ.get("USERNAME", "").strip()
+
+    if not re.fullmatch(r"[A-Za-z]{2,20}", name):
+        return "Hello, what can I help with?"
+
+    return f"Hello {name}, what can I help with?"
 
 
 def _padded(audio):
@@ -143,6 +161,21 @@ class Listener:
         try:
             with microphone as source:
                 self.on_status("Calibrating for background noise...")
+
+                # Greet first and wait for the voice to finish, rather than
+                # greeting while the measurement runs.
+                # adjust_for_ambient_noise() takes the room's energy as the
+                # floor for what counts as speech, so measuring with the
+                # voice playing locks the threshold above anything the user
+                # says afterwards -- the app would greet you and then be deaf
+                # for the rest of the session.
+                #
+                # Skipped on first run: the setup conversation opens with a
+                # hello of its own, and two in a row is one too many.
+                if not settings.is_first_run():
+                    say(_greeting())
+                    speech.wait()
+
                 recognizer.adjust_for_ambient_noise(source, duration=1)
 
                 # Dynamic adjustment tends to drift the threshold down until

@@ -7,6 +7,8 @@ from output import say
 NAME = "stop"
 TAKES_ARG = False
 ALIASES = ("stopp", "quit", "exit", "goodbye")
+PHRASES = ("shut down", "shut yourself down", "close yourself",
+           "see you later", "that will be all")
 HELP = "stop         -- quit Hard2Assist"
 
 

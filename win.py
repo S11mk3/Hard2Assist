@@ -22,6 +22,11 @@ ERROR_ACCESS_DENIED = 5
 # rather than maximising it the way SW_SHOWMAXIMIZED would.
 SW_RESTORE = 9
 
+# Minimise and let Windows activate whatever was behind, exactly as clicking
+# the minimise button does. SW_SHOWMINNOACTIVE would leave the focus sitting
+# on a window that is no longer on screen.
+SW_MINIMIZE = 6
+
 # Callback type for EnumWindows, which passes each top-level window handle
 # to a function we supply.
 ENUM_WINDOWS_PROC = ctypes.WINFUNCTYPE(
@@ -213,6 +218,24 @@ def focus_window(hwnd):
             user32.AttachThreadInput(ours, theirs, False)
 
     return user32.GetForegroundWindow() == hwnd
+
+
+def minimize_window(hwnd):
+    """Send a window to the taskbar. The opposite of focus_window().
+
+    Returns True only if the window really ended up minimised. ShowWindow's
+    own return value reports whether the window *was* visible beforehand, not
+    whether the request was carried out, so the result is read back from
+    IsIconic instead -- an elevated window ignores the request in silence
+    (the same UIPI rule that blocks close), and the caller needs to be able
+    to say so rather than claim a minimise that never happened.
+    """
+    if user32.IsIconic(hwnd):
+        return True  # already out of the way
+
+    user32.ShowWindow(hwnd, SW_MINIMIZE)
+
+    return bool(user32.IsIconic(hwnd))
 
 
 # Volume virtual-key codes. Windows treats these as keystrokes from a keyboard
