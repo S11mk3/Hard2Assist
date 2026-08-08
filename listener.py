@@ -48,10 +48,6 @@ class Listener:
 
         self._warned_offline = False
 
-        # Set once listening starts. Handy for checking the noise threshold is
-        # holding steady rather than drifting.
-        self.recognizer = None
-
     # -- control, called from the window --------------------------------------
 
     def pause(self):
@@ -73,7 +69,6 @@ class Listener:
 
     def run(self):
         recognizer = sr.Recognizer()
-        self.recognizer = recognizer
 
         try:
             microphone = sr.Microphone()

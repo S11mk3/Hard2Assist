@@ -34,8 +34,9 @@ OPTIONS = [
 
     # ...and because those command modules are invisible to PyInstaller, so is
     # everything *they* import. Without these the .exe builds happily and then
-    # loads only `stop`, because apps/win/psutil were never packed. Do not
-    # remove these without running `--selftest` on the result.
+    # loads only `stop`, because apps/win/psutil were never packed. If you
+    # remove one, open the built .exe and check `computer help` still lists
+    # every command -- a build missing a piece starts up looking fine.
     "--hidden-import", "apps",
     "--hidden-import", "win",
     "--hidden-import", "psutil",

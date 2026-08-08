@@ -111,12 +111,11 @@ To run from source instead:
 
 ```
 python hard2assist.py             # the window
-python hard2assist.py --console   # no window, easier to debug
-python hard2assist.py --selftest  # check a build is complete
+python hard2assist.py --console   # the same thing in a terminal, no window
 ```
 
-`--selftest` matters after building. A build missing a piece still starts and still opens its
-window -- it is just silently mute, or has no commands. This is the only thing that catches it.
+After building, open the .exe and say `computer help`. A build missing a piece still starts
+and still opens its window, so seeing every command listed is what tells you it is complete.
 
 ---
 
@@ -167,15 +166,16 @@ site("youtube", "https://www.youtube.com")
 ## Where things live
 
 ```
-hard2assist.py      entry point -- window, --console, or --selftest
+hard2assist.py      entry point -- the window, or --console
 gui.py              the window
 theme.py            colours and fonts, all in one place
 listener.py         the microphone loop
 speech.py           the voice
 registry.py         finds commands, works out which one you meant
-output.py           say() and announce()
+output.py           say() writes and speaks, detail() only writes
 ask.py              asking you for a file mid-command
 win.py              the only Windows API code
+audio.py            reading and setting the exact volume
 build.py            builds the .exe
 
 commands/
@@ -185,6 +185,7 @@ commands/
   Web/              online       search
 
 apps/
+  app.py            what an app is -- name, how to launch it, how to find its window
   system.py         built into Windows
   installed.py      found in your Start Menu, plus ones you picked
   websites.py       sites

@@ -89,10 +89,6 @@ def names():
     return sorted(app.name for app in all_apps())
 
 
-def names_of_kind(kind):
-    return [app.name for app in all_apps() if app.kind == kind]
-
-
 def remember(name, path):
     """Save an app you picked and make it findable straight away."""
     app = installed.remember(name, path)
@@ -101,7 +97,7 @@ def remember(name, path):
 
 
 def counts():
-    """How many of each kind, for the selftest and the log line at startup."""
+    """How many of each kind, for the log line the window shows at startup."""
     tally = {}
     for app in all_apps():
         tally[app.kind] = tally.get(app.kind, 0) + 1

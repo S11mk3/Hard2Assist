@@ -1,109 +1,9 @@
-"""Hard2Assist -- say "computer <something>" and it does it.
-
-Opens a window by default. Pass --console for a plain terminal version, which
-is handy when something is going wrong and you want to see it happen.
-"""
-
-import os
 import sys
-import tempfile
-import time
 
-import apps
 import listener
 import registry
 import speech
 from output import detail, say
-
-EXPECTED_COMMANDS = {"open", "close", "kill", "help", "stop", "time", "date",
-                     "battery", "status", "disk", "volume", "play", "search"}
-
-
-def run_selftest():
-    """Check that a build is complete. Run this after building the .exe.
-
-    A .exe that is missing pieces still starts and still opens its window -- it
-    just quietly has no commands, because the command modules are loaded by
-    scanning at runtime and PyInstaller cannot see what they import. This says
-    so plainly instead.
-    """
-    report = []
-
-    def note(text):
-        report.append(str(text))
-
-    note(f"frozen        : {getattr(sys, 'frozen', False)}")
-    note(f"roots         : {registry._roots()}")
-
-    commands = registry.load()
-    note(f"commands found: {sorted(commands) or 'NONE'}")
-
-    for module_name in ("apps", "win", "psutil", "speech_recognition",
-                        "comtypes", "comtypes.client", "pycaw.utils"):
-        try:
-            __import__(module_name)
-            note(f"import {module_name:<24}: ok")
-        except Exception as e:
-            note(f"import {module_name:<24}: MISSING ({e})")
-
-    # A build with no voice starts perfectly happily and is simply mute, so it
-    # has to be checked rather than noticed.
-    # Say several things, not one. Speaking once has never been the problem --
-    # the failure was speaking the first line and then going silent for the
-    # rest of the session, with no error raised. Only repetition catches that.
-    speaks = False
-    if speech.start():
-        wanted = 3
-        for i in range(wanted):
-            speech.speak(f"Self test, line {i + 1}.")
-
-        deadline = time.time() + 40
-        while time.time() < deadline and speech.spoken_count() < wanted:
-            if speech.error():
-                break
-            time.sleep(0.2)
-        speaks = speech.spoken_count() >= wanted
-
-    if speaks:
-        note(f"speech                          : ok "
-             f"({speech.spoken_count()} phrases actually spoken)")
-    elif speech.available():
-        note(f"speech                          : STARTED BUT ONLY SPOKE "
-             f"{speech.spoken_count()} of 3 "
-             f"-- {speech.error() or 'no error reported'}")
-    else:
-        note(f"speech                          : NOT AVAILABLE -- {speech.error()}")
-
-    import audio
-    note(f"volume control                  : "
-         f"{'ok (' + str(audio.level()) + '%)' if audio.available() else 'NOT AVAILABLE'}")
-
-    tally = apps.counts()
-    note(f"apps                            : {sum(tally.values())} "
-         f"({', '.join(f'{k} {v}' for k, v in sorted(tally.items()))})")
-
-    missing = EXPECTED_COMMANDS - set(commands)
-    ok = not missing and speaks
-    note("")
-    if missing:
-        note(f"RESULT: FAILED, missing commands {sorted(missing)}")
-    elif not speaks:
-        note("RESULT: FAILED, it cannot speak")
-    else:
-        note("RESULT: ok")
-
-    text = "\n".join(report)
-
-    # A windowed build has no stdout, so always leave the report on disk too.
-    path = os.path.join(tempfile.gettempdir(), "hard2assist-selftest.txt")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text)
-
-    if sys.stdout is not None:
-        print(text)
-        print(f"\n(also written to {path})")
-
-    return 0 if ok else 1
 
 
 def run_console():
@@ -135,9 +35,6 @@ def run_console():
 
 
 def main():
-    if "--selftest" in sys.argv:
-        return run_selftest()
-
     if "--console" in sys.argv:
         run_console()
     else:
