@@ -1,4 +1,4 @@
-﻿"""How much battery is left."""
+"""Report how much battery is left."""
 
 import psutil
 
@@ -28,8 +28,8 @@ def run():
 
     message = f"{percent} percent"
 
-    # secsleft is a couple of sentinel values when Windows has not worked out an
-    # estimate yet, so only mention time when it is a real number.
+    # secsleft holds sentinel values while Windows is still estimating, so
+    # only mention remaining time when it is a real positive number.
     if state.secsleft is not None and state.secsleft > 0:
         hours, minutes = divmod(state.secsleft // 60, 60)
         if hours:

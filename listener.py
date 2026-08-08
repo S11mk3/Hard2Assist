@@ -1,8 +1,8 @@
-"""The microphone loop.
+"""Microphone loop shared by the GUI and console modes.
 
-Kept apart from both the window and the console entry point so they run exactly
-the same listening code. Call run() on a background thread (the window does) or
-on the main thread (console mode does).
+The GUI runs Listener.run() on a background thread; console mode runs it on
+the main thread. Both receive recognised commands through the same callback
+interface, so the listening behaviour is identical in either mode.
 """
 
 import threading
@@ -14,18 +14,19 @@ from output import detail, say
 
 PREFIX = "computer"
 
-# Short listen timeout so the loop comes back around often enough to notice a
-# pause or a quit without making you wait for it.
+# A short listen timeout keeps the loop cycling frequently, so a pause or
+# stop request is noticed quickly instead of blocking on the microphone.
 LISTEN_TIMEOUT = 1
 PHRASE_LIMIT = 8
 
 
 def strip_prefix(text, required):
-    """Pull the command out of what was said or typed.
+    """Extract the command from an utterance.
 
-    Speech has to start with the wake word, otherwise "I bought a computer
-    yesterday" would set things off. Typing it is optional -- you already showed
-    intent by typing in the box.
+    Spoken input must start with the wake word so that ordinary conversation
+    ("I bought a computer yesterday") does not trigger commands. When
+    ``required`` is False the prefix is optional, which suits typed input.
+    Returns the command text, or None if the wake word was required and absent.
     """
     spoken = text.lower().strip()
 
@@ -36,10 +37,10 @@ def strip_prefix(text, required):
 
 
 class Listener:
-    """Listens, and hands recognised commands to a callback."""
+    """Listens on the microphone and hands recognised commands to a callback."""
 
     def __init__(self, on_command, on_status):
-        self.on_command = on_command    # called with the command text
+        self.on_command = on_command    # called with the recognised command text
         self.on_status = on_status      # on_status(text, transient=False)
 
         self._stop = threading.Event()
@@ -48,33 +49,37 @@ class Listener:
 
         self._warned_offline = False
 
-    # -- control, called from the window --------------------------------------
+    # -- control, called from other threads -----------------------------------
 
     def pause(self):
+        """Stop capturing audio until resume() is called."""
         self._active.clear()
         self.on_status("Paused")
 
     def resume(self):
+        """Start capturing audio again after pause()."""
         self._active.set()
         self.on_status("Listening")
 
     def stop(self):
+        """Shut the loop down; run() returns shortly after."""
         self._stop.set()
 
     @property
     def paused(self):
         return not self._active.is_set()
 
-    # -- the loop -------------------------------------------------------------
+    # -- the loop --------------------------------------------------------------
 
     def run(self):
+        """Open the microphone and listen until stop() is called."""
         recognizer = sr.Recognizer()
 
         try:
             microphone = sr.Microphone()
         except Exception as e:
-            # No input device, or PyAudio missing. Hard2Assist is voice only, so
-            # there is nothing it can do until that is sorted out.
+            # No input device, or PyAudio is missing. Hard2Assist is voice
+            # only, so there is nothing to do until a microphone is available.
             self.on_status("No microphone found")
             say("I could not find a microphone, and I only take voice commands.")
             detail("Plug one in, check it is enabled in Windows sound settings, "
@@ -87,8 +92,9 @@ class Listener:
                 self.on_status("Calibrating for background noise...")
                 recognizer.adjust_for_ambient_noise(source, duration=1)
 
-                # Left on, the threshold drifts down until room tone counts as
-                # speech, and you get an endless run of failed recognitions.
+                # Dynamic adjustment tends to drift the threshold down until
+                # background noise registers as speech, producing an endless
+                # stream of failed recognitions. Calibrate once and lock it.
                 recognizer.dynamic_energy_threshold = False
                 recognizer.energy_threshold = max(
                     recognizer.energy_threshold * 1.2, 300
@@ -113,7 +119,8 @@ class Listener:
                     phrase_time_limit=PHRASE_LIMIT,
                 )
             except sr.WaitTimeoutError:
-                continue  # silence, which is the normal case
+                # Silence; the normal case.
+                continue
 
             if self._stop.is_set():
                 break
@@ -121,8 +128,8 @@ class Listener:
             try:
                 text = recognizer.recognize_google(audio)
             except sr.UnknownValueError:
-                # A cough, a door, a bit of music. Worth a flicker in the status
-                # line, not a line in the log.
+                # Unintelligible audio (a cough, music, a door closing).
+                # Worth a brief status flicker, not a log entry.
                 self.on_status("Didn't catch that", transient=True)
                 continue
             except sr.RequestError as e:

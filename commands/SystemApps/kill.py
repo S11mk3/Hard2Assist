@@ -1,4 +1,4 @@
-﻿"""Force an app to stop. Unlike `close`, it does not get to save anything."""
+"""Force an app to stop. Unlike `close`, it does not get to save anything."""
 
 import psutil
 
@@ -15,6 +15,8 @@ HELP = "kill <app>   -- force an app to stop, without saving ('kill all <app>' f
 def run(argument):
     argument = argument.strip()
 
+    # "kill all cmd" targets every window; plain "kill cmd" targets only the
+    # most recently opened one.
     every = False
     if argument.lower().startswith("all "):
         every = True
@@ -28,7 +30,7 @@ def run(argument):
     if app.protected:
         say(f"I won't kill {app.name}")
         detail(f"It is the Windows shell, and killing it would take the taskbar "
-            f"and desktop with it. Try 'computer close {app.name}' instead.")
+               f"and desktop with it. Try 'computer close {app.name}' instead.")
         return
 
     if every:
@@ -41,8 +43,8 @@ def run(argument):
         say(f"{app.name} does not seem to be open.")
         return
 
-    # Several windows can belong to one process, so collect the ids first and
-    # terminate each process once.
+    # Several windows can belong to one process, so deduplicate the process
+    # ids first and terminate each process once.
     pids = {win.pid_of_window(hwnd) for hwnd in handles}
 
     killed = 0
@@ -51,10 +53,10 @@ def run(argument):
             psutil.Process(pid).terminate()
             killed += 1
         except psutil.NoSuchProcess:
-            pass  # already gone, nothing to do
+            pass  # already gone
         except psutil.AccessDenied:
             detail(f"Not allowed to kill {app.name} (pid {pid}). "
-                f"It may need an administrator.")
+                   f"It may need an administrator.")
 
     if killed:
         process = "process" if killed == 1 else "processes"

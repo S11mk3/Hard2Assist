@@ -1,4 +1,4 @@
-﻿"""What time is it."""
+"""Say what time it is."""
 
 from datetime import datetime
 
@@ -12,6 +12,6 @@ HELP = "time         -- what time it is"
 
 def run():
     now = datetime.now()
-    # %#I is Windows' "hour without a leading zero". Saying "It's 07:05" sounds
-    # like a robot; "It's 7:05" does not.
+    # %#I is the Windows strftime code for "hour without a leading zero":
+    # "It's 7:05" reads naturally where "It's 07:05" does not.
     say(f"It's {now.strftime('%#I:%M %p').lower()}")

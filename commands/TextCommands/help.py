@@ -1,5 +1,8 @@
-﻿"""List what Hard2Assist can do. Everything here is generated, so it cannot
-drift out of step with the actual commands and apps."""
+"""List everything Hard2Assist can do.
+
+The output is generated from the loaded commands and the app catalogue,
+so it cannot drift out of step with what is actually available.
+"""
 
 import apps
 import registry
@@ -16,7 +19,7 @@ WIDTH = 24
 def run():
     commands = registry.load()
 
-    # Short spoken summary; the lists themselves would be tedious to listen to.
+    # Speak only a short summary; the full lists would be tedious to hear.
     say(f"I know {len(commands)} commands and {len(apps.names())} apps. "
         f"They're on screen.")
 

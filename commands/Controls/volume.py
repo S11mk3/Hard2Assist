@@ -10,8 +10,8 @@ ALIASES = ("vol", "sound", "volumes")
 HELP = "volume up|down|mute|<number> -- change the volume"
 EXAMPLE = "volume 50"
 
-# Each tap is one notch, which is 2% on Windows. Five is a noticeable step
-# without being a jump.
+# Each key tap moves the volume one notch, which is 2% on Windows. Five taps
+# is a noticeable step without being a jump.
 STEPS = 5
 
 # Spoken numbers arrive as words at least as often as digits.
@@ -29,7 +29,7 @@ TENS = {
 
 
 def to_number(text):
-    """Turn "50", "fifty" or "twenty five" into a number. None if it is not one."""
+    """Parse "50", "fifty" or "twenty five" into an int. None if it is not a number."""
     text = text.lower().replace("percent", "").replace("%", "")
     text = text.replace("-", " ").strip()
 
@@ -59,7 +59,8 @@ def to_number(text):
             total += int(word)
             seen = True
         else:
-            return None  # a word we do not understand means this is not a number
+            # Any unrecognised word means this is not a number phrase.
+            return None
 
     return total if seen else None
 
@@ -82,7 +83,8 @@ def run(argument):
         say("Muted")
         return
 
-    # "volume 50", "volume fifty", "volume fifty percent", "volume max"
+    # Exact level: "volume 50", "volume fifty", "volume fifty percent",
+    # "volume max".
     wanted = to_number(what)
     if wanted is None:
         say("Say volume up, volume down, volume mute, or a number like "

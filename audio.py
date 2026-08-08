@@ -1,11 +1,11 @@
 """Reading and setting the exact system volume.
 
-The media keys can only nudge the volume up and down a notch at a time, which
-is no use for "set it to fifty". That needs the Windows audio API, which pycaw
-wraps.
+The media keys can only nudge the volume one notch at a time, which is no use
+for "set it to fifty" -- that requires the Windows Core Audio API, accessed
+through pycaw.
 
-COM objects belong to the thread that made them, and commands run on the
-microphone thread, so the endpoint is kept per thread.
+COM objects are bound to the thread that created them, and commands run on
+the microphone thread, so the audio endpoint is cached per thread.
 """
 
 import threading
@@ -14,7 +14,7 @@ _local = threading.local()
 
 
 def _endpoint():
-    """The speakers' volume control, or None if this PC will not give us one."""
+    """The speakers' volume-control interface, or None if unavailable."""
     if getattr(_local, "tried", False):
         return _local.endpoint
 
@@ -22,8 +22,8 @@ def _endpoint():
     _local.endpoint = None
 
     try:
-        # Same rule as the voice: COM has to be switched on for this thread
-        # before anything will hand us an interface.
+        # COM must be initialised on this thread before any interface can
+        # be obtained (same requirement as the speech voice).
         import comtypes
         comtypes.CoInitialize()
 
@@ -40,7 +40,7 @@ def available():
 
 
 def level():
-    """Current volume, 0 to 100, or None."""
+    """Current volume as 0-100, or None if it cannot be read."""
     endpoint = _endpoint()
     if endpoint is None:
         return None
@@ -51,15 +51,15 @@ def level():
 
 
 def set_level(percent):
-    """Set the volume. Returns the level it ended up at, or None on failure."""
+    """Set the volume. Returns the resulting level, or None on failure."""
     endpoint = _endpoint()
     if endpoint is None:
         return None
 
     percent = max(0, min(100, int(percent)))
     try:
-        # Setting a level while muted looks broken -- you turn it up and hear
-        # nothing -- so unmute at the same time.
+        # Setting a level while muted appears broken (the volume goes up but
+        # nothing is heard), so unmute at the same time.
         if percent > 0 and endpoint.GetMute():
             endpoint.SetMute(0, None)
         endpoint.SetMasterVolumeLevelScalar(percent / 100, None)

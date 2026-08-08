@@ -1,15 +1,15 @@
-"""Finds the command modules and decides which one an utterance is asking for.
+"""Command discovery and dispatch.
 
 A command module is any .py file under commands/<group>/ that defines:
 
     NAME      -- the word the user says
     TAKES_ARG -- True if the rest of the sentence is passed to run()
-    HELP      -- one line shown by `help`
-    ALIASES   -- optional; other words the recogniser produces for this one
-    run()     -- run(arg) if TAKES_ARG else run()
+    HELP      -- one line shown by the `help` command
+    ALIASES   -- optional; words the recogniser commonly returns instead
+    run()     -- run(arg) if TAKES_ARG, otherwise run()
 
-Nothing about a command is written down anywhere else, so adding one means
-dropping a file in the folder.
+Commands are registered purely by their presence on disk: adding one means
+dropping a file into the folder, with no central list to update.
 """
 
 import difflib
@@ -20,18 +20,17 @@ import sys
 
 from output import detail, say
 
-# A command returns this to tell the main loop to shut down. `stop` is the only
-# one that does.
+# Sentinel a command returns to request shutdown. Only `stop` uses it.
 STOP = object()
 
 
 def _roots():
-    """Directories that might hold a commands/ folder.
+    """Directories that may contain a commands/ folder.
 
-    Running from source there is only one. Inside the built .exe there are two:
-    PyInstaller unpacks the bundled files to a temporary folder (sys._MEIPASS),
-    and we also look next to the .exe itself so you can drop in a new command
-    without rebuilding.
+    Running from source there is only one. In the built .exe there are two:
+    the PyInstaller bundle (sys._MEIPASS, where the shipped commands are
+    unpacked) and the directory next to the .exe itself, so users can drop
+    in new commands without rebuilding.
     """
     if getattr(sys, "frozen", False):
         return [sys._MEIPASS, os.path.dirname(sys.executable)]
@@ -45,7 +44,8 @@ _aliases = {}
 def load():
     """Import every command module. Returns {name: module}.
 
-    Cached, so `help` can ask for the command list without redoing the scan.
+    The result is cached so callers (such as `help`) can request the command
+    list without rescanning the disk.
     """
     global _loaded
     if _loaded is not None:
@@ -70,7 +70,9 @@ def load():
 
             name = module.NAME.lower()
             if name in commands:
-                continue  # first root wins; a later one does not override
+                # First root wins; a command next to the .exe never overrides
+                # a bundled one of the same name.
+                continue
 
             commands[name] = module
 
@@ -80,10 +82,10 @@ def load():
 
 
 def _build_aliases(commands):
-    """Map every alias a command declares onto that command.
+    """Map each declared alias onto its command.
 
-    "close" is the one that really needs this -- Google's recogniser hears the
-    ordinary English word "clothes" almost every time.
+    Aliases absorb consistent recognition errors -- for example, Google's
+    recogniser returns "clothes" for "close" far more often than not.
     """
     global _aliases
     _aliases = {}
@@ -91,16 +93,18 @@ def _build_aliases(commands):
     for name, module in commands.items():
         for alias in getattr(module, "ALIASES", ()):
             alias = alias.lower()
-            if alias not in commands:      # a real command always wins
+            # A real command name always takes priority over an alias.
+            if alias not in commands:
                 _aliases.setdefault(alias, name)
 
 
 def resolve(commands, word):
-    """Work out which command a spoken word meant.
+    """Determine which command a spoken word refers to.
 
-    Returns (name, corrected_from) where corrected_from is set if we had to
-    interpret. Never guesses silently -- being told "I took 'cloze' as 'close'"
-    is far better than wondering why the wrong thing happened.
+    Returns (name, corrected_from), where corrected_from is the original word
+    when a correction was applied (alias or fuzzy match) and None on an exact
+    match. Corrections are reported to the user rather than applied silently.
+    Returns (None, None) when nothing matches.
     """
     word = word.lower()
 
@@ -118,14 +122,15 @@ def resolve(commands, word):
 
 
 def _import_file(path):
-    """Load a single .py file as a module, by its path.
+    """Load a single .py file as a module, by path.
 
-    Loading by path rather than as part of a `commands` package is what lets the
-    built .exe pick up commands dropped in beside it. A package remembers the
-    folder it was first imported from, so anything added later in a different
-    folder would never be found.
+    Loading by path rather than through a `commands` package is what allows
+    the built .exe to pick up command files dropped in next to it: a package
+    is bound to the folder it was first imported from, so files added later
+    in a different folder would never be found.
     """
-    # Unique name per file, so two groups can hold same-named files.
+    # The module name includes the full path so that same-named files in
+    # different groups do not collide in sys.modules.
     unique = "h2a_command_" + path.replace(os.sep, "_").replace(":", "").lstrip("_")
 
     try:
@@ -143,11 +148,10 @@ def _import_file(path):
 def dispatch(commands, utterance):
     """Run the command an utterance asks for.
 
-    The first word is the command and the rest is its argument, so "open task
-    manager" is the `open` command with "task manager". Matching the first word
-    exactly keeps this predictable -- the old code searched for a command name
-    anywhere in the sentence, so a sentence containing two command words was
-    resolved by whatever order the files happened to be listed in.
+    The first word selects the command and the rest becomes its argument:
+    "open task manager" runs `open` with "task manager". Matching only the
+    first word keeps dispatch predictable when a sentence happens to contain
+    more than one command name.
     """
     utterance = utterance.strip()
     if not utterance:
@@ -161,8 +165,8 @@ def dispatch(commands, utterance):
         return None
 
     if corrected_from:
-        # Written but not spoken: you are about to hear the command's own
-        # confirmation, which already tells you what it decided to do.
+        # Written but not spoken: the command's own confirmation, which
+        # follows immediately, already says what it decided to do.
         detail(f"(heard '{corrected_from}', taking it as '{name}')")
 
     module = commands[name]

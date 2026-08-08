@@ -1,4 +1,4 @@
-﻿"""Ask an app to close, politely."""
+"""Ask an app to close, giving it the chance to save first."""
 
 import apps
 import win
@@ -7,8 +7,8 @@ from output import detail, say
 NAME = "close"
 TAKES_ARG = True
 
-# "clothes" is not a joke -- it is what Google's recogniser returns for "close"
-# more often than not.
+# "clothes" is what Google's recogniser returns for "close" more often
+# than not; the rest are its other frequent guesses.
 ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
 
 HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"
@@ -17,8 +17,8 @@ HELP = "close <app>  -- close an app, letting it save first ('close all <app>' f
 def run(argument):
     argument = argument.strip()
 
-    # "close all cmd" means every window; plain "close cmd" means the one you
-    # most likely just opened.
+    # "close all cmd" closes every window; plain "close cmd" closes only the
+    # most recently opened one.
     every = False
     if argument.lower().startswith("all "):
         every = True
@@ -56,5 +56,5 @@ def run(argument):
 
     if denied:
         say(f"Windows won't let me close {app.name}")
-        detail(f"It runs as administrator and Hard2Assist does not. Restart "
-            f"Hard2Assist as administrator to control it.")
+        detail("It runs as administrator and Hard2Assist does not. Restart "
+               "Hard2Assist as administrator to control it.")

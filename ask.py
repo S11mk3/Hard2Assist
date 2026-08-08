@@ -1,11 +1,12 @@
-"""Asking you something mid-command.
+"""Asking the user a question mid-command.
 
-Only used for one thing so far: when `open` meets a program it has never heard
-of, it needs to know where that program lives. You cannot dictate
-"C:\\Program Files\\..." into a voice-only window, so the window opens a file
-picker instead and you click the program once.
+Currently used for one thing: when `open` meets a program it does not know,
+it needs the program's location, and a file path cannot be dictated into a
+voice-only interface. The GUI answers by opening a file picker; console mode
+falls back to a typed prompt.
 
-Works like output.py -- whoever is running the interface registers a handler.
+Follows the same pattern as output.py: whichever interface is running
+registers a handler at startup.
 """
 
 import os
@@ -14,20 +15,20 @@ _handler = None
 
 
 def on_request(handler):
-    """handler(name) -> path or None. The window sets this at startup."""
+    """Register `handler(name) -> path or None`. The GUI sets this at startup."""
     global _handler
     _handler = handler
 
 
 def for_program(name):
-    """Ask where a program is. Returns a path, or None if you cancelled."""
+    """Ask where a program is. Returns a path, or None if the user cancelled."""
     if _handler is None:
         return _console_ask(name)
     return _handler(name)
 
 
 def _console_ask(name):
-    """Fallback for --console mode, where there is no window to put a dialog in."""
+    """Fallback for --console mode, where there is no window to host a dialog."""
     try:
         path = input(f"Where is '{name}'? Paste the full path, "
                      f"or press Enter to skip: ").strip().strip('"')

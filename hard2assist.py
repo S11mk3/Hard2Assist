@@ -1,3 +1,9 @@
+"""Hard2Assist entry point.
+
+Starts the GUI by default. Pass --console to run the same listening loop
+in the terminal instead, without a window.
+"""
+
 import sys
 
 import listener
@@ -7,13 +13,14 @@ from output import detail, say
 
 
 def run_console():
+    """Run Hard2Assist in the terminal."""
     commands = registry.load()
     if not commands:
         say("No commands were found, so there is nothing to do.")
         return
 
-    # detail(), not say() -- a banner and a list of every command is not
-    # something anyone wants read aloud at startup.
+    # The startup banner and command list are informational, so they are
+    # written with detail() rather than read aloud.
     detail("Hard2Assist")
     detail("Commands: " + ", ".join(sorted(commands)))
 
@@ -23,11 +30,15 @@ def run_console():
             ears.stop()
 
     def on_status(text, transient=False):
-        if not transient:          # transient ones would spam the terminal
+        # Transient statuses update constantly and would flood the terminal,
+        # so only persistent ones are printed.
+        if not transient:
             detail(text)
 
     ears = listener.Listener(on_command=on_command, on_status=on_status)
 
+    # Pause the microphone while speaking so the assistant does not pick up
+    # and react to its own voice.
     if speech.start():
         speech.on_speaking(ears.pause, ears.resume)
 

@@ -1,4 +1,4 @@
-﻿"""Start talking back again."""
+"""Start speaking replies again after `quiet`."""
 
 import speech
 from output import detail, say
