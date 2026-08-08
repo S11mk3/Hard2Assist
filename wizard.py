@@ -22,8 +22,12 @@ ATTEMPTS = 3
 YES = {"yes", "yeah", "yep", "yup", "correct", "right", "sure", "ok", "okay",
        "confirm", "affirmative", "that's right", "thats right", "do it"}
 
+# "know" and "now" are not answers anyone gives; they are what the recogniser
+# returns for a spoken "no" often enough to be worth absorbing, the same way
+# commands take ALIASES for their common mishearings. Nothing meaning yes
+# sounds like either, and YES is tested first, so "yes I know" is still a yes.
 NO = {"no", "nope", "nah", "wrong", "incorrect", "negative", "cancel",
-       "not right", "no thanks"}
+       "not right", "no thanks", "know", "now"}
 
 # Said in answer to a question to leave that setting alone.
 KEEP = {"keep", "keep it", "skip", "same", "unchanged", "next", "leave it",

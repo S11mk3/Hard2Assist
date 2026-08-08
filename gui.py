@@ -11,6 +11,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog
 
@@ -27,8 +28,17 @@ import wizard
 
 WINDOW_SIZE = "800x600"
 HINT_CLEAR_MS = 4000
-PULSE_MS = 50
 ICON = "H2A.ico"
+
+# How often the dot is redrawn, and how long one full breath takes. 50ms was
+# slow enough that the movement read as a series of steps rather than a glide.
+PULSE_MS = 16
+PULSE_PERIOD = 3.4
+
+# The blend is quantised to this many steps. Tk allocates a colour for every
+# distinct string it is given, so a fresh one on every frame makes the canvas
+# do far more work than the eye can see across these two narrow ranges.
+PULSE_STEPS = 40
 
 DEFAULT_HINT = 'say "computer help" to hear what I can do'
 
@@ -40,6 +50,8 @@ STATES = {
     "Not in focus": "NOT IN FOCUS",
     "No microphone found": "NO MICROPHONE",
     "Microphone stopped": "MIC STOPPED",
+    "Calibrating for background noise...": "CALIBRATING",
+    listener.SETUP: "SETTING UP",
 }
 
 
@@ -51,7 +63,14 @@ class App:
         # Commands run one at a time, whichever thread asked for one.
         self.command_lock = threading.Lock()
         self._hint_job = None
-        self._pulse = 0.0
+
+        # When the current spell of listening began, or None while at rest.
+        self._pulse_start = None
+
+        # Last colour given to each canvas item, so an unchanged one is not
+        # re-sent every frame.
+        self._colours = {}
+
         self._listening = False
         self._last_speech_error = ""
         self._said_muted = False
@@ -124,6 +143,10 @@ class App:
         self.ring = self.canvas.create_oval(0, 0, 0, 0, outline=theme.ACCENT_DIM)
         self.dot = self.canvas.create_oval(0, 0, 0, 0, fill=theme.ACCENT, width=0)
 
+        # Both are created with no size, so give them the resting shape now --
+        # _animate() only redraws the dot at rest when it transitions there.
+        self._draw(None)
+
         self.state = tk.StringVar(value="STARTING")
         tk.Label(
             self.root, textvariable=self.state, font=theme.STATE_FONT,
@@ -178,29 +201,51 @@ class App:
     # -- the pulse -------------------------------------------------------------
 
     def _animate(self):
-        """Redraw the dot and ring, then reschedule."""
+        """Advance the pulse and reschedule.
+
+        The phase is taken from the clock rather than added to per frame.
+        Tk delivers after() callbacks late whenever the log panel or the
+        microphone thread is busy, and a fixed step per frame turns every late
+        callback into a visible stall -- which is what made the dot stutter.
+        Reading the clock makes a late frame take a longer step instead, so
+        the breath keeps an even speed however the frames land.
+        """
+        if self._listening:
+            if self._pulse_start is None:
+                self._pulse_start = time.monotonic()
+
+            turn = ((time.monotonic() - self._pulse_start)
+                    * (2 * math.pi / PULSE_PERIOD))
+
+            # (1 - cos)/2 rather than (sin + 1)/2 so each spell of listening
+            # opens from the resting size instead of jumping to mid-breath.
+            self._draw((1 - math.cos(turn)) / 2)
+
+        elif self._pulse_start is not None:
+            # Just stopped listening: settle back to the resting dot, once.
+            self._pulse_start = None
+            self._draw(None)
+
+        self.root.after(PULSE_MS, self._animate)
+
+    def _draw(self, breathe):
+        """Paint the dot and ring. `breathe` runs 0..1, or None for at rest."""
         centre, base = 60, 13
 
-        if self._listening:
-            self._pulse += 0.09
-            breathe = (math.sin(self._pulse) + 1) / 2  # oscillates 0..1
-
-            radius = base + breathe * 3
-            self.canvas.itemconfigure(
-                self.dot, fill=theme.blend(theme.ACCENT_DIM, theme.ACCENT, breathe)
-            )
-
-            # The ring expands outward while fading into the background.
-            ring_radius = base + 6 + breathe * 26
-            self.canvas.itemconfigure(
-                self.ring,
-                outline=theme.blend(theme.ACCENT_DIM, theme.BG, breathe),
-            )
+        if breathe is None:
+            radius, ring_radius = base, base + 6
+            dot_colour, ring_colour = theme.DIM, theme.LINE
         else:
-            radius = base
-            ring_radius = base + 6
-            self.canvas.itemconfigure(self.dot, fill=theme.DIM)
-            self.canvas.itemconfigure(self.ring, outline=theme.LINE)
+            radius = base + breathe * 3
+            ring_radius = base + 6 + breathe * 26
+
+            shade = round(breathe * PULSE_STEPS) / PULSE_STEPS
+            dot_colour = theme.blend(theme.ACCENT_DIM, theme.ACCENT, shade)
+            # The ring expands outward while fading into the background.
+            ring_colour = theme.blend(theme.ACCENT_DIM, theme.BG, shade)
+
+        self._paint(self.dot, "fill", dot_colour)
+        self._paint(self.ring, "outline", ring_colour)
 
         self.canvas.coords(
             self.dot,
@@ -212,7 +257,13 @@ class App:
             centre + ring_radius, centre + ring_radius,
         )
 
-        self.root.after(PULSE_MS, self._animate)
+    def _paint(self, item, option, colour):
+        """Recolour a canvas item, skipping the call when nothing changed."""
+        if self._colours.get(item) == colour:
+            return
+
+        self._colours[item] = colour
+        self.canvas.itemconfigure(item, **{option: colour})
 
     # -- messages between threads ----------------------------------------------
 

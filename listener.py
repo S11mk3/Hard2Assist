@@ -23,6 +23,24 @@ PHRASE_LIMIT = 8
 # rather than the loop just sampling for a wake word.
 ANSWER_TIMEOUT = 7
 
+# Shown while the setup conversation is speaking. The main loop has not started
+# yet at that point, so without a status of its own the window would keep
+# reading "Calibrating..." for the whole conversation -- which looks like a
+# microphone that never finished starting up.
+SETUP = "Setting up"
+
+# Silence added to both ends of a clip before it is recognised.
+#
+# Google returns an empty result for a short word with no silence around it:
+# a bare "no" or "yeah" comes back as nothing at all rather than as a
+# mishearing. listen() keeps up to non_speaking_duration (0.5s) of lead-in,
+# but only if the user waited that long before speaking -- and answering the
+# instant a question ends leaves almost none, which is why the setup
+# conversation's yes/no questions usually took two or three goes. Half a
+# second each side is enough to make them recognise first time, and it leaves
+# ordinary commands unchanged.
+PAD_SECONDS = 0.5
+
 
 def strip_prefix(text, prefix):
     """Extract the command from an utterance.
@@ -37,6 +55,20 @@ def strip_prefix(text, prefix):
         return spoken[len(prefix):].strip(" ,.")
 
     return None
+
+
+def _padded(audio):
+    """The clip with PAD_SECONDS of silence on each end.
+
+    See PAD_SECONDS: short answers are otherwise recognised as nothing at all.
+    """
+    silence = b"\x00" * int(audio.sample_rate * audio.sample_width * PAD_SECONDS)
+
+    return sr.AudioData(
+        silence + audio.frame_data + silence,
+        audio.sample_rate,
+        audio.sample_width,
+    )
 
 
 class Listener:
@@ -129,6 +161,11 @@ class Listener:
                     # pause hooks stay quiet and the conversation owns the
                     # status line instead of flickering Paused/Listening.
                     if self.on_ready is not None:
+                        # Calibration is over. Said explicitly because the
+                        # conversation below can run for a minute, and leaving
+                        # "Calibrating..." up for all of it reads as a stuck
+                        # microphone.
+                        self.on_status(SETUP)
                         self.on_ready(self)
 
                     self._running = True
@@ -159,7 +196,7 @@ class Listener:
         setup conversation. Raises the speech_recognition errors, which callers
         tell apart to distinguish "unintelligible" from "no connection".
         """
-        return self._recognizer.recognize_google(audio)
+        return self._recognizer.recognize_google(_padded(audio))
 
     def listen_once(self, timeout=ANSWER_TIMEOUT):
         """Capture one utterance with no wake word required, or None.
@@ -172,6 +209,12 @@ class Listener:
         if self._recognizer is None or self._source is None:
             return None
 
+        # The only cue the user gets that it is their turn to speak. During
+        # setup the main loop is not running, so nothing else moves the status
+        # line -- and a question answered before this point is not heard,
+        # because the microphone is only open inside the listen() below.
+        self.on_status("Listening")
+
         try:
             audio = self._recognizer.listen(
                 self._source, timeout=timeout, phrase_time_limit=PHRASE_LIMIT
@@ -181,6 +224,12 @@ class Listener:
         except Exception as e:
             detail(f"Something went wrong listening: {e}")
             return None
+        finally:
+            # Back to the setup status while the answer is recognised. Only
+            # during setup: once the loop owns the status line it puts
+            # "Listening" back itself.
+            if not self._running:
+                self.on_status(SETUP)
 
         try:
             return self._transcribe(audio)
