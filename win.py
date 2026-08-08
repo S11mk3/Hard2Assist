@@ -157,15 +157,11 @@ def close_window(hwnd):
     raise OSError(ctypes.WinError(ctypes.get_last_error()))
 
 
-# Media and volume virtual-key codes. Windows treats these as keystrokes from
-# a keyboard with media buttons and routes them to whatever is playing --
-# Spotify, a YouTube tab, VLC -- with no need to know which.
+# Volume virtual-key codes. Windows treats these as keystrokes from a keyboard
+# with volume buttons, so they adjust the system volume like real key presses.
 VK_VOLUME_MUTE = 0xAD
 VK_VOLUME_DOWN = 0xAE
 VK_VOLUME_UP = 0xAF
-VK_MEDIA_NEXT = 0xB0
-VK_MEDIA_PREVIOUS = 0xB1
-VK_MEDIA_PLAY_PAUSE = 0xB3
 
 KEYEVENTF_KEYUP = 0x0002
 

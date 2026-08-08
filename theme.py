@@ -1,6 +1,6 @@
 """Colours and fonts, kept in one place so the look is easy to change.
 
-Dark background, cyan accent, green log text.
+Dark background, cyan accent, white log text.
 """
 
 BG = "#08090b"          # window background
@@ -9,7 +9,7 @@ LINE = "#1b2027"        # hairline dividers
 
 ACCENT = "#22d3ee"      # cyan: the app is alive and listening
 ACCENT_DIM = "#0e7490"  # faded cyan, used by the outer pulse ring
-TEXT = "#33ff00"        # normal log text
+TEXT = "#fcfdfc"        # normal log text
 DIM = "#6b7683"         # grey: hints and secondary lines
 WARN = "#f59e0b"        # amber: something did not work
 

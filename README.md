@@ -2,7 +2,7 @@
 
 # Hard2Assist
 
-**Talk to your PC. It listens, does the thing, and tells you it did.**
+**WINDOWS VOICE ASSISTANT.**
 
 Hard2Assist is a voice assistant for Windows. Say **"computer"** followed by a command
 and it opens programs and websites, closes windows, controls volume and media playback,
@@ -68,8 +68,6 @@ you want:
 | `computer disk` | 🔊 *"C has 58 gigabytes free"* |
 | `computer volume 50` | sets it to exactly 50%. "fifty" works too |
 | `computer volume up` | louder. `down` and `mute` too |
-| `computer play` | play or pause whatever is playing |
-| `computer next` | skip a track. `back` for the previous one |
 | `computer search how to cook rice` | opens the results in your browser |
 | `computer help` | lists everything it knows |
 | `computer stop` | quits |
@@ -83,7 +81,7 @@ Every command confirms what it did, and the log keeps the whole conversation:
 A few things worth knowing while you use it:
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 17 commands and 139 apps, they're on screen"*
+  instead, so `computer help` says *"I know 14 commands and 139 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -185,7 +183,7 @@ build.py            builds the .exe
 commands/
   TextCommands/     answers      help time date battery status disk
   SystemApps/       acting       open close kill
-  Controls/         the PC       volume play next back quiet speak stop
+  Controls/         the PC       volume quiet speak stop
   Web/              online       search
 
 apps/
