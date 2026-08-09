@@ -54,13 +54,22 @@ SUGGEST_CUTOFF = 0.7
 def _roots():
     """Directories that may contain a commands/ folder.
 
-    Running from source there is only one. In the built .exe there are two:
+    Running from source there is only one. In the built .exe there are three:
     the PyInstaller bundle (sys._MEIPASS, where the shipped commands are
-    unpacked) and the directory next to the .exe itself, so users can drop
-    in new commands without rebuilding.
+    unpacked), the directory next to the .exe itself, and the user's own
+    folder in %APPDATA%.
+
+    The last one exists because the .exe is installed rather than copied
+    somewhere by hand, and an install folder is not always writable -- under
+    Program Files it certainly is not. %APPDATA% always is, so dropping in a
+    new command works wherever the app was installed.
     """
     if getattr(sys, "frozen", False):
-        return [sys._MEIPASS, os.path.dirname(sys.executable)]
+        return [
+            sys._MEIPASS,
+            os.path.dirname(sys.executable),
+            settings.USER_DIR,
+        ]
     return [os.path.dirname(os.path.abspath(__file__))]
 
 
