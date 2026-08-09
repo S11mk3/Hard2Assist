@@ -7,7 +7,8 @@
 Hard2Assist is a voice assistant for Windows. Say **"computer"** followed by a command
 and it opens programs and websites, closes windows, controls volume and media playback,
 and answers questions about your PC — battery, time, disk space, CPU load — out loud.
-It ships as a single `.exe` with everything packed inside, so there is nothing to install.
+It installs from a single setup file and carries its own copy of Python, so there is
+nothing else to install.
 
 The first time you run it, it talks you through a short setup out loud — pick your own
 wake word instead of "computer", and decide whether it listens all the time or only
@@ -21,15 +22,21 @@ while its window is in focus.
 
 ## Setup
 
-### Option 1 — the .exe (recommended)
+### Option 1 — the installer (recommended)
 
-Download (or build, see below) `Hard2Assist.exe` and double-click it. That is the whole
-setup: Python and every library are bundled inside the file.
+Download (or build, see below) `Hard2Assist-Setup.exe` and run it. It asks where to
+install, and whether you want a desktop shortcut. It does **not** ask for administrator
+rights: by default it installs just for you, under `%LOCALAPPDATA%\Programs`.
 
 You only need two things:
 
 - 🎤 **a microphone**
 - 🌐 **an internet connection** — recognition uses Google's free speech API
+
+> **"Windows protected your PC"?** Click **More info → Run anyway**. Hard2Assist is not
+> signed with a code-signing certificate, and Windows shows that warning for every
+> unsigned program from a publisher it has not seen before. The certificates that remove
+> it are a paid yearly subscription from a certificate authority.
 
 ### Option 2 — run from source
 
@@ -39,7 +46,7 @@ python hard2assist.py             # the window
 python hard2assist.py --console   # the same thing in a terminal, no window
 ```
 
-### Building the .exe yourself
+### Building it yourself
 
 ```
 pip install -r requirements.txt
@@ -47,9 +54,33 @@ pip install pyinstaller
 python build.py
 ```
 
-That writes `dist\Hard2Assist.exe`. Copy that one file anywhere. After building, open it
-and say `computer help` — seeing every command listed is how you know the build is
-complete, because a build missing a piece still starts and looks fine.
+That writes `dist\Hard2Assist\` — the app, with Python beside it. Open the
+`Hard2Assist.exe` inside and say `computer help`: seeing every command listed is how you
+know the build is complete, because a build missing a piece still starts and looks fine.
+
+To wrap that folder into the installer, install
+[Inno Setup](https://jrsoftware.org/isdl.php) (free, no account needed) and run:
+
+```
+python build.py --installer
+```
+
+which writes `installer\Hard2Assist-Setup.exe`, the single file to hand to anyone else.
+
+<details>
+<summary>Why a folder rather than one big .exe?</summary>
+
+It used to be a single 57 MB `.exe`. PyInstaller builds those by appending a compressed
+archive to a small launcher, so every single launch unpacked ~67 MB into `%TEMP%` before
+the window could appear — about **4 seconds, every time**. Antivirus heuristics are also
+suspicious of that shape, because writing executables into a temp folder and running them
+is what droppers do.
+
+Shipping a plain folder removes the unpacking step entirely (**~0.5 s to the window**),
+and the installer keeps the download a single file. Dropping the unused offline speech
+models and NumPy at the same time took the app from 67 MB to 29 MB.
+
+</details>
 
 ---
 
@@ -168,8 +199,12 @@ It is picked up on the next start and `help` lists it automatically. Use
 command is never accidentally silent — reach for `detail()` only when the output is a
 list or a long explanation nobody would want read aloud.
 
-This works with the built .exe too: put a `commands` folder next to `Hard2Assist.exe`,
-drop the file in, restart. No rebuild needed.
+This works with the installed app too. Put the file in a `commands\<group>\` folder in
+either of these, then restart — no rebuild needed:
+
+- `%APPDATA%\Hard2Assist\commands\` — always works, whatever folder you installed to
+- next to `Hard2Assist.exe` — only if you can write to the install folder, which you
+  cannot under `Program Files`
 
 ### An app or a website
 
@@ -202,7 +237,8 @@ output.py           say() writes and speaks, detail() only writes
 ask.py              asking you for a file mid-command
 win.py              the only Windows API code
 audio.py            reading and setting the exact volume
-build.py            builds the .exe
+build.py            builds the app folder, and the installer
+installer.iss       the installer, for Inno Setup
 
 commands/
   TextCommands/     answers      help time date battery status disk
