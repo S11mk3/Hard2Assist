@@ -4,8 +4,7 @@ import wizard
 
 NAME = "customize"
 TAKES_ARG = False
-ALIASES = ("customise", "customize", "settings", "setup", "preferences",
-           "configure")
+ALIASES = ("customise", "settings", "setup", "preferences", "configure")
 HELP = "customize    -- change the wake word and how I listen"
 
 

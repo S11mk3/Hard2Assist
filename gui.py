@@ -295,7 +295,7 @@ class App:
                 tag = "command"
             elif text.startswith(("Could not", "I could not", "I don't know",
                                   "Not allowed", "Windows won't", "I won't",
-                                  "Cannot reach", "Speech recognition needs")):
+                                  "I can't reach", "The microphone stopped")):
                 tag = "warn"
             else:
                 tag = "normal"

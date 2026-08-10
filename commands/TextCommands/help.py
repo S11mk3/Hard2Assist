@@ -12,9 +12,9 @@ from output import detail, say
 NAME = "help"
 TAKES_ARG = False
 ALIASES = ("commands", "hlep")
-PHRASES = ("what can you do", "what do you do", "what can i say",
-           "what commands do you know", "what are your commands",
-           "list your commands")
+# Only the phrasings that name no command word at all. Anything containing
+# "commands" is already reached by the alias below.
+PHRASES = ("what can you do", "what do you do", "what can i say")
 HELP = "help         -- show this list"
 
 # The log panel is comfortable at roughly this width.

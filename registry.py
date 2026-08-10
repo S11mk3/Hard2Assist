@@ -45,9 +45,13 @@ LEAD_WORDS = ("turn", "set", "put", "make", "change", "adjust", "please",
               "can", "could", "would", "you", "i", "just", "want", "let",
               "lets", "let's")
 
+# How close the first word must be to a command name before it is taken *as*
+# that command and run.
+MATCH_CUTOFF = 0.75
+
 # How close a word must be to a command name before it is offered as a
-# suggestion. Looser than the cutoff used to act on a word, because this only
-# ever produces advice the user can ignore.
+# suggestion. Looser than MATCH_CUTOFF, because this only ever produces advice
+# the user can ignore rather than running anything.
 SUGGEST_CUTOFF = 0.7
 
 
@@ -271,7 +275,8 @@ def understand(commands, utterance):
         return name, argument, corrected
 
     # 3: the first word, mangled by the recogniser.
-    close = difflib.get_close_matches(words[0], list(commands), n=1, cutoff=0.75)
+    close = difflib.get_close_matches(words[0], list(commands), n=1,
+                                      cutoff=MATCH_CUTOFF)
     if close:
         return close[0], _argument(words[1:]), words[0]
 
@@ -338,29 +343,6 @@ def _report_unknown(commands, utterance):
         return
 
     say(f"I don't know '{utterance}'.")
-
-
-def resolve(commands, word):
-    """Determine which command a spoken word refers to.
-
-    Returns (name, corrected_from), where corrected_from is the original word
-    when a correction was applied (alias or fuzzy match) and None on an exact
-    match. Corrections are reported to the user rather than applied silently.
-    Returns (None, None) when nothing matches.
-    """
-    word = word.lower()
-
-    if word in commands:
-        return word, None
-
-    if word in _aliases:
-        return _aliases[word], word
-
-    close = difflib.get_close_matches(word, list(commands), n=1, cutoff=0.75)
-    if close:
-        return close[0], word
-
-    return None, None
 
 
 def _import_file(path):
