@@ -92,28 +92,23 @@ KINDS = (
 )
 
 
-def names():
-    """Canonical names only; aliases and misspellings stay hidden from `help`.
-
-    Deduplicated: the Start Menu scan turns up plenty of apps that system.py
-    already lists by hand, so notepad, paint, task manager and a dozen more
-    otherwise appear twice over.
-
-    Sorted for display. The catalogue itself remains in search order, since
-    find() relies on system apps being matched before Start Menu ones.
-    """
-    return sorted({app.name for app in all_apps()})
-
-
 def names_by_kind():
     """Names grouped by where they came from, as [(label, names)].
+
+    Canonical names only; aliases and misspellings stay hidden from `help`.
 
     `help` reads better split up than as one run of 140 names: which of them
     are Windows' own, which were found on this PC and which are websites is
     most of what makes the list understandable.
 
     A name is listed once, under the first source that claims it -- the same
-    precedence find() applies, so what is shown is what would be opened.
+    precedence find() applies, so what is shown is what would be opened. The
+    Start Menu scan turns up plenty of apps that system.py already lists by
+    hand, so without that, notepad, paint, task manager and a dozen more would
+    each appear twice over.
+
+    Sorted for display. The catalogue itself stays in search order, since
+    find() relies on system apps being matched before Start Menu ones.
     """
     seen = set()
     grouped = {kind: [] for kind, _ in KINDS}
@@ -139,8 +134,8 @@ def remember(name, path):
 def counts():
     """Number of apps per source kind, for the GUI's startup log line.
 
-    Deduplicated exactly as names() is, so the count in the window agrees
-    with the list `help` prints instead of being sixteen higher.
+    Deduplicated exactly as names_by_kind() is, so the count in the window
+    agrees with the list `help` prints instead of being sixteen higher.
     """
     seen = set()
     tally = {}

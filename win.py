@@ -181,7 +181,9 @@ def close_window(hwnd):
 
     if ctypes.get_last_error() == ERROR_ACCESS_DENIED:
         raise AccessDenied
-    raise OSError(ctypes.WinError(ctypes.get_last_error()))
+    # WinError() builds the OSError itself, carrying the Windows error code and
+    # its description; wrapping it in another OSError would bury both.
+    raise ctypes.WinError(ctypes.get_last_error())
 
 
 def focus_window(hwnd):

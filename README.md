@@ -5,7 +5,7 @@
 **WINDOWS VOICE ASSISTANT.**
 
 Hard2Assist is a voice assistant for Windows. Say **"computer"** followed by a command
-and it opens programs and websites, closes windows, controls volume and media playback,
+and it opens programs and websites, closes and minimizes windows, controls the volume,
 and answers questions about your PC — battery, time, disk space, CPU load — out loud.
 It installs from a single setup file and carries its own copy of Python, so there is
 nothing else to install.
@@ -50,7 +50,6 @@ python hard2assist.py --console   # the same thing in a terminal, no window
 
 ```
 pip install -r requirements.txt
-pip install pyinstaller
 python build.py
 ```
 
@@ -95,6 +94,7 @@ you want:
 | `computer open obs studio` | opens anything in your Start Menu — no setup |
 | `computer open youtube` | opens the site in your browser |
 | `computer focus notepad` | brings it to the front, even if it was minimised |
+| `computer minimize notepad` | sends it to the taskbar — the opposite of `focus` |
 | `computer close notepad` | closes it, letting it save first |
 | `computer kill notepad` | forces it to stop |
 | `computer time` | 🔊 *"It's 8:02 pm"* |
@@ -134,7 +134,7 @@ A few things worth knowing while you use it:
     while it is deliberately ignoring you, so it never looks broken.
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 16 commands and 140 apps, they're on screen"*
+  instead, so `computer help` says *"I know 17 commands and 140 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -242,7 +242,7 @@ installer.iss       the installer, for Inno Setup
 
 commands/
   TextCommands/     answers      help time date battery status disk
-  AppCommands/      acting       open focus close kill
+  AppCommands/      acting       open focus minimize close kill
   Controls/         the PC       volume quiet speak stop customize
   Web/              online       search
 

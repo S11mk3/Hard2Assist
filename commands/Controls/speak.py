@@ -6,8 +6,10 @@ from output import detail, say
 NAME = "speak"
 TAKES_ARG = False
 ALIASES = ("speech", "talk", "voice")
-PHRASES = ("start talking", "start speaking", "talk again", "speak again",
-           "you can talk")
+# Only the phrasings that name no command word at all. "talk again" and "you
+# can talk" need no entry -- "talk" is already an alias below, so the word scan
+# reaches them.
+PHRASES = ("start talking", "start speaking")
 HELP = "speak        -- start speaking replies again"
 
 
