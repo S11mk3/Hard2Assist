@@ -8,7 +8,7 @@ NAME = "stop"
 TAKES_ARG = False
 ALIASES = ("stopp", "quit", "exit", "goodbye")
 PHRASES = ("shut down", "shut yourself down", "close yourself",
-           "see you later", "that will be all")
+           "see you later", "that will be all", "stuff")
 HELP = "stop         -- quit Hard2Assist"
 
 

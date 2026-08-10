@@ -15,6 +15,11 @@ import psutil
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
+# Only for known_folder() at the bottom of this file: shell32 knows where
+# Documents actually is, and ole32 parses the id and frees the answer.
+shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+
 WM_CLOSE = 0x0010
 ERROR_ACCESS_DENIED = 5
 
@@ -303,6 +308,139 @@ def tap_key(vk, times=1):
         user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
 
 
+# -- typing ------------------------------------------------------------------
+#
+# send_text() and send_keys() go through SendInput rather than the keybd_event
+# above. keybd_event is enough for the volume keys, which are the same on every
+# keyboard, but not for text: it sends a key *position*, so the letters that
+# come out depend on the user's layout. SendInput can send a character instead
+# (KEYEVENTF_UNICODE), which types the same thing on every layout in the world.
+
+KEYEVENTF_UNICODE = 0x0004
+INPUT_KEYBOARD = 1
+
+VK_CONTROL = 0x11
+VK_SHIFT = 0x10
+VK_MENU = 0x12          # Alt
+VK_RETURN = 0x0D
+VK_TAB = 0x09
+VK_ESCAPE = 0x1B
+VK_SPACE = 0x20
+VK_BACK = 0x08
+VK_DELETE = 0x2E
+VK_HOME = 0x24
+VK_END = 0x23
+VK_LEFT = 0x25
+VK_UP = 0x26
+VK_RIGHT = 0x27
+VK_DOWN = 0x28
+
+
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        # ULONG_PTR: pointer-sized, so it must not be a plain DWORD on 64-bit.
+        # wintypes.WPARAM is exactly that type under another name.
+        ("dwExtraInfo", wintypes.WPARAM),
+    ]
+
+
+class _MOUSEINPUT(ctypes.Structure):
+    """Declared only for its size.
+
+    INPUT is a union, and Windows sizes it by its largest member -- which is
+    the mouse one, not the keyboard one. Leaving this out makes sizeof(INPUT)
+    too small, and SendInput then rejects every event and returns 0 without
+    setting an error, which looks exactly like nothing happening at all.
+    """
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", wintypes.WPARAM),
+    ]
+
+
+class _INPUTUNION(ctypes.Union):
+    _fields_ = [("ki", _KEYBDINPUT), ("mi", _MOUSEINPUT)]
+
+
+class _INPUT(ctypes.Structure):
+    _fields_ = [("type", wintypes.DWORD), ("union", _INPUTUNION)]
+
+
+user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int]
+user32.SendInput.restype = wintypes.UINT
+
+
+def _key_event(vk=0, scan=0, flags=0):
+    event = _INPUT(type=INPUT_KEYBOARD)
+    event.union.ki = _KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=flags,
+                                 time=0, dwExtraInfo=0)
+    return event
+
+
+def _send(events):
+    """Inject a batch of input events. False if Windows refused them.
+
+    Sent as one array rather than one call per event, so the user's own
+    keystrokes cannot land in the middle of what is being typed.
+
+    A refusal is normally UIPI: injected input cannot reach a window owned by
+    an elevated process, the same rule that stops `close` from reaching Task
+    Manager. There is nothing to be done about it here beyond reporting it, so
+    the caller gets a False rather than an exception.
+    """
+    if not events:
+        return True
+
+    array = (_INPUT * len(events))(*events)
+    sent = user32.SendInput(len(events), array, ctypes.sizeof(_INPUT))
+
+    return sent == len(events)
+
+
+def send_text(text):
+    """Type text into whatever window has focus. False if Windows refused.
+
+    Iterated in UTF-16 code units rather than characters, because that is what
+    a keyboard event carries. Anything outside the basic multilingual plane is
+    two units, and sending both in order is what makes it arrive intact
+    instead of as a pair of question marks.
+    """
+    if not text:
+        return True
+
+    units = text.encode("utf-16-le")
+
+    events = []
+    for i in range(0, len(units), 2):
+        code = units[i] | (units[i + 1] << 8)
+        events.append(_key_event(scan=code, flags=KEYEVENTF_UNICODE))
+        events.append(_key_event(scan=code,
+                                 flags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP))
+
+    return _send(events)
+
+
+def send_keys(*vks):
+    """Press keys together and release them: send_keys(VK_CONTROL, 0x53).
+
+    Pressed in the order given and released in reverse, which is how a person
+    holds down control and then taps S. Releasing in the same order instead
+    would let go of control first, and the chord would not register.
+    """
+    events = [_key_event(vk=vk) for vk in vks]
+    events += [_key_event(vk=vk, flags=KEYEVENTF_KEYUP) for vk in reversed(vks)]
+
+    return _send(events)
+
+
 def pid_of_window(hwnd):
     """The id of the process that owns a window."""
     pid = wintypes.DWORD()
@@ -333,3 +471,67 @@ def foreground_is_ours():
     if not hwnd:
         return False
     return pid_of_window(hwnd) == os.getpid()
+
+
+def foreground_title():
+    """The title of the window in front, or "".
+
+    What `type` names in its confirmation. Typed keys go wherever the focus
+    is, so the title of that window is the only honest answer to "where did
+    that text land".
+    """
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    return _title_of(hwnd)
+
+
+# -- known folders -----------------------------------------------------------
+
+
+class _GUID(ctypes.Structure):
+    _fields_ = [
+        ("Data1", wintypes.DWORD),
+        ("Data2", wintypes.WORD),
+        ("Data3", wintypes.WORD),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
+
+
+ole32.CLSIDFromString.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(_GUID)]
+ole32.CLSIDFromString.restype = ctypes.c_long
+ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+ole32.CoTaskMemFree.restype = None
+shell32.SHGetKnownFolderPath.argtypes = [
+    ctypes.POINTER(_GUID), wintypes.DWORD, wintypes.HANDLE,
+    ctypes.POINTER(ctypes.c_wchar_p),
+]
+shell32.SHGetKnownFolderPath.restype = ctypes.c_long
+
+
+def known_folder(guid):
+    """Where a Windows known folder really is, or "" if it has no path.
+
+    Asked of Windows rather than assembled from the home directory, because
+    Documents and Pictures are routinely redirected into OneDrive. Guessing
+    "%USERPROFILE%\\Documents" then points at an empty leftover folder that is
+    not the one the user means, and it looks like the app opened the wrong
+    thing for no reason.
+
+    `guid` is the known folder id as its usual braced string.
+    """
+    parsed = _GUID()
+    if ole32.CLSIDFromString(guid, ctypes.byref(parsed)) != 0:
+        return ""
+
+    path = ctypes.c_wchar_p()
+    if shell32.SHGetKnownFolderPath(ctypes.byref(parsed), 0, None,
+                                    ctypes.byref(path)) != 0:
+        return ""
+
+    try:
+        return path.value or ""
+    finally:
+        # Windows allocated the string and expects it back. Skipping this
+        # leaks a little memory on every call.
+        ole32.CoTaskMemFree(path)

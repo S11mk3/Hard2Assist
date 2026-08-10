@@ -4,6 +4,7 @@ import os
 
 import apps
 import ask
+import session
 from output import detail, say
 
 NAME = "open"
@@ -14,12 +15,21 @@ EXAMPLE = "open notepad"
 
 
 def run(argument):
-    app = apps.find(argument)
+    app = session.resolve(argument)
 
     if app is None:
+        # "open it" with nothing to point at is a misunderstanding, not an
+        # unknown program. Opening a file picker and asking the user to find
+        # "it" on their disk would be absurd.
+        if argument.lower().strip() in session.PRONOUNS:
+            session.unknown(argument)
+            return
+
         app = _ask_where_it_is(argument)
         if app is None:
             return
+
+        session.remember(app)
 
     # os.startfile() goes through the Windows shell, which is what makes one
     # code path work for everything: plain exes, .msc consoles, ms-settings:

@@ -5,10 +5,10 @@
 **WINDOWS VOICE ASSISTANT.**
 
 Hard2Assist is a voice assistant for Windows. Say **"computer"** followed by a command
-and it opens programs and websites, closes and minimizes windows, controls the volume,
-and answers questions about your PC — battery, time, disk space, CPU load — out loud.
-It installs from a single setup file and carries its own copy of Python, so there is
-nothing else to install.
+and it opens programs, folders and websites, types for you, closes and minimizes windows,
+controls the volume, and answers questions about your PC — battery, time, disk space,
+CPU load — out loud. It installs from a single setup file and carries its own copy of
+Python, so there is nothing else to install.
 
 The first time you run it, it talks you through a short setup out loud — pick your own
 wake word instead of "computer", and decide whether it listens all the time or only
@@ -93,12 +93,17 @@ you want:
 | `computer open notepad` | launches an app, a program, or a website |
 | `computer open obs studio` | opens anything in your Start Menu — no setup |
 | `computer open youtube` | opens the site in your browser |
+| `computer open documents` | opens a folder — `downloads`, `pictures`, `desktop`… |
 | `computer focus notepad` | brings it to the front, even if it was minimised |
-| `computer minimize notepad` | sends it to the taskbar — the opposite of `focus` |
+| `computer minimize it` | **"it" means whatever you last named** |
 | `computer fullscreen notepad` | fills the screen with it. "full screen" works too |
 | `computer shrink notepad` | puts it back to its normal size |
 | `computer close notepad` | closes it, letting it save first |
 | `computer kill notepad` | forces it to stop |
+| `computer type hello there` | types it into whatever is in front |
+| `computer press enter` | also `tab`, `escape`, `save`, `copy`, `paste`, `undo` |
+| `computer dictate` | types everything you say, until you say **computer stop dictating** |
+| `computer what's open` | lists the windows on screen |
 | `computer time` | 🔊 *"It's 8:02 pm"* |
 | `computer date` | 🔊 *"It's Friday, August 8"* |
 | `computer battery` | 🔊 *"82 percent, charging"* |
@@ -135,8 +140,34 @@ A few things worth knowing while you use it:
     window — more private, but you have to click first. The window says **NOT IN FOCUS**
     while it is deliberately ignoring you, so it never looks broken.
 
+- **It remembers what you just named.** Say `computer open notepad` and then **"it"**,
+  **"that"** or **"this"** means notepad until you name something else:
+
+  ```
+  computer open notepad
+  computer type hello there
+  computer minimize it
+  computer close it
+  ```
+
+  Only the app is remembered, never a particular window — the commands still go and find
+  the windows each time, exactly as they do when you say the name in full. Say
+  `computer what's open` to see what is around to be named.
+
+- **It can type for you.** `computer type <anything>` sends it to whatever window is in
+  front. If Hard2Assist's own window is in front — which it always is if you chose *only
+  when in focus* — it switches to the app you last named first, so `type` follows `open`
+  the way the two sound when you say them.
+
+  Recognition gives back plain lowercase words with no punctuation, so a few are spoken:
+  **new line**, **comma**, **period**, **question mark**. `computer type hello there comma
+  how are you question mark` types *"Hello there, how are you?"*.
+
+  For more than a sentence, say `computer dictate` and just talk — every sentence is typed
+  as you say it, with no wake word needed, until you say `computer stop dictating`.
+
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 19 commands and 140 apps, they're on screen"*
+  instead, so `computer help` says *"I know 23 commands and 131 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -208,7 +239,7 @@ either of these, then restart — no rebuild needed:
 - next to `Hard2Assist.exe` — only if you can write to the install folder, which you
   cannot under `Program Files`
 
-### An app or a website
+### An app, a website or a folder
 
 One line in `apps/system.py` or `apps/websites.py`:
 
@@ -220,7 +251,10 @@ site("youtube", "https://www.youtube.com")
 ```
 
 `launch` goes to the Windows shell, so an exe, a `.msc` console, a `ms-settings:` URI,
-a `.lnk` shortcut or a URL all work.
+a `.lnk` shortcut, a folder path or a URL all work — which is why websites and folders
+need no command of their own and go through the same `open` as everything else.
+`apps/folders.py` adds the standard folders that way, asking Windows where each one
+really is rather than assuming (Downloads is on a different drive on plenty of PCs).
 
 ---
 
@@ -235,7 +269,9 @@ speech.py           the voice
 settings.py         what the user chose, saved between runs
 wizard.py           the spoken setup conversation
 registry.py         finds commands, works out which one you meant
+session.py          what you last named, so the next command can say "it"
 output.py           say() writes and speaks, detail() only writes
+spoken.py           turning what was heard into what gets typed
 ask.py              asking you for a file mid-command
 win.py              the only Windows API code
 audio.py            reading and setting the exact volume
@@ -243,14 +279,16 @@ build.py            builds the app folder, and the installer
 installer.iss       the installer, for Inno Setup
 
 commands/
-  TextCommands/     answers      help time date battery status disk
+  TextCommands/     answers      help time date battery status disk windows
   AppCommands/      acting       open focus minimize fullscreen shrink close kill
+  Typing/           the keyboard type press dictate
   Controls/         the PC       volume quiet speak stop customize
   Web/              online       search
 
 apps/
   app.py            what an app is -- name, how to launch it, how to find its window
   system.py         built into Windows
+  folders.py        Documents, Downloads and the rest, wherever Windows put them
   installed.py      found in your Start Menu, plus ones you picked
   websites.py       sites
 ```
@@ -262,7 +300,18 @@ apps/
 - **Elevated apps.** Device Manager, Services, Registry Editor and friends can run as
   administrator. Windows will not let a normal program send window messages to one, so
   `close` reports that it was refused rather than pretending. `kill` usually still
-  works. Run Hard2Assist as administrator to `close` them.
+  works. Run Hard2Assist as administrator to `close` them. The same rule blocks `type`
+  and `press` from reaching an elevated window, and they say so rather than typing
+  into nothing.
+- **`dictate` listens without the wake word.** That is the point of it — you cannot say
+  "computer" before every sentence of a paragraph — but it does mean that while it runs,
+  everything you say is typed. The wake word comes back for the one sentence that ends it:
+  say **computer stop dictating**, or stay quiet and it stops by itself. A bare "stop" is
+  deliberately not enough — it ends ordinary sentences too ("the bus came to a stop"), and
+  a dictation that quits halfway through a paragraph is worse than one that needs three
+  words to leave. Said on the end of a sentence it still works, and the sentence is typed
+  first. It also keeps listening under *only when in focus*, because the app you are
+  dictating into is by then the one in front.
 - **Focus can be refused.** Windows does not let a background program take the
   foreground in every situation. When it refuses, `focus` says so rather than
   pretending, and the app's taskbar button flashes instead.
