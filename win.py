@@ -19,13 +19,20 @@ WM_CLOSE = 0x0010
 ERROR_ACCESS_DENIED = 5
 
 # Restore puts a minimised window back at the size the user last gave it,
-# rather than maximising it the way SW_SHOWMAXIMIZED would.
+# rather than maximising it the way SW_SHOWMAXIMIZED would. It undoes either
+# state, so it is the way back from both `fullscreen` and `minimize`.
 SW_RESTORE = 9
 
 # Minimise and let Windows activate whatever was behind, exactly as clicking
 # the minimise button does. SW_SHOWMINNOACTIVE would leave the focus sitting
 # on a window that is no longer on screen.
 SW_MINIMIZE = 6
+
+# Maximise and activate, exactly as clicking the maximise button does. This is
+# as close to "fullscreen" as an outside program can get: true fullscreen is
+# something each app implements for itself -- usually on F11 -- so there is no
+# call that imposes it on an app that has none.
+SW_SHOWMAXIMIZED = 3
 
 # Callback type for EnumWindows, which passes each top-level window handle
 # to a function we supply.
@@ -55,6 +62,8 @@ user32.GetWindowThreadProcessId.argtypes = [
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 user32.IsIconic.argtypes = [wintypes.HWND]
 user32.IsIconic.restype = wintypes.BOOL
+user32.IsZoomed.argtypes = [wintypes.HWND]
+user32.IsZoomed.restype = wintypes.BOOL
 user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.ShowWindow.restype = wintypes.BOOL
 user32.BringWindowToTop.argtypes = [wintypes.HWND]
@@ -238,6 +247,44 @@ def minimize_window(hwnd):
     user32.ShowWindow(hwnd, SW_MINIMIZE)
 
     return bool(user32.IsIconic(hwnd))
+
+
+def maximize_window(hwnd):
+    """Fill the screen with a window. The opposite of restore_window().
+
+    As close to fullscreen as an outside program can get -- see
+    SW_SHOWMAXIMIZED.
+
+    Returns True only if the window really ended up maximised. Read back from
+    IsZoomed for the same reason minimize_window() reads IsIconic: ShowWindow's
+    own return value reports whether the window *was* visible beforehand, not
+    whether the request was carried out, and an elevated window ignores it in
+    silence.
+    """
+    if user32.IsZoomed(hwnd):
+        return True  # already filling the screen
+
+    user32.ShowWindow(hwnd, SW_SHOWMAXIMIZED)
+
+    return bool(user32.IsZoomed(hwnd))
+
+
+def restore_window(hwnd):
+    """Put a window back to the size the user last gave it.
+
+    SW_RESTORE undoes maximised and minimised alike, so this is the way back
+    from `fullscreen` and from `minimize` both -- which is what lets `shrink`
+    take "restore" as an alias without the word having to mean two things.
+
+    Returns True only if the window really came back, read back from IsZoomed
+    and IsIconic for the same reason maximize_window() does.
+    """
+    if not user32.IsZoomed(hwnd) and not user32.IsIconic(hwnd):
+        return True  # already at its normal size
+
+    user32.ShowWindow(hwnd, SW_RESTORE)
+
+    return not user32.IsZoomed(hwnd) and not user32.IsIconic(hwnd)
 
 
 # Volume virtual-key codes. Windows treats these as keystrokes from a keyboard

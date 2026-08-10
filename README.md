@@ -95,6 +95,8 @@ you want:
 | `computer open youtube` | opens the site in your browser |
 | `computer focus notepad` | brings it to the front, even if it was minimised |
 | `computer minimize notepad` | sends it to the taskbar — the opposite of `focus` |
+| `computer fullscreen notepad` | fills the screen with it. "full screen" works too |
+| `computer shrink notepad` | puts it back to its normal size |
 | `computer close notepad` | closes it, letting it save first |
 | `computer kill notepad` | forces it to stop |
 | `computer time` | 🔊 *"It's 8:02 pm"* |
@@ -134,7 +136,7 @@ A few things worth knowing while you use it:
     while it is deliberately ignoring you, so it never looks broken.
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 17 commands and 140 apps, they're on screen"*
+  instead, so `computer help` says *"I know 19 commands and 140 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -242,7 +244,7 @@ installer.iss       the installer, for Inno Setup
 
 commands/
   TextCommands/     answers      help time date battery status disk
-  AppCommands/      acting       open focus minimize close kill
+  AppCommands/      acting       open focus minimize fullscreen shrink close kill
   Controls/         the PC       volume quiet speak stop customize
   Web/              online       search
 
