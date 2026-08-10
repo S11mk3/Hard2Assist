@@ -18,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -132,6 +133,9 @@ OPTIONS = [
     "--hidden-import", "audio",
     "--hidden-import", "pycaw",
     "--hidden-import", "pycaw.utils",
+    "--hidden-import", "session",
+    "--hidden-import", "spoken",
+    "--hidden-import", "listener",
 ]
 
 for module in EXCLUDES:
@@ -274,6 +278,49 @@ def build_installer(app_dir):
     return os.path.join(HERE, "installer", f"{NAME}-Setup.exe")
 
 
+# How long to keep trying to delete the previous build.
+#
+# Windows holds a folder open for as long as anything is looking at it, and the
+# ordinary way to hit that is to rebuild straight after testing: the .exe has
+# only just exited, or the folder is still showing in an Explorer window. The
+# handle is usually released within a second, so retrying turns what was a
+# traceback halfway through the delete into a pause nobody notices.
+CLEAN_ATTEMPTS = 8
+CLEAN_PAUSE = 0.5
+
+
+def clean(path):
+    """Delete a previous build folder. False if Windows would not let go.
+
+    Reported rather than raised, because "the app you were just testing is
+    still running" is a normal thing to have done and deserves a sentence
+    saying so, not a stack trace ending in WinError 32.
+    """
+    blocked = None
+
+    for _ in range(CLEAN_ATTEMPTS):
+        if not os.path.isdir(path):
+            return True
+
+        try:
+            shutil.rmtree(path)
+            return True
+        except PermissionError as e:
+            # A partial delete: rmtree removes what it can and stops at the
+            # first locked entry, so the next attempt has less left to do.
+            blocked = e
+            time.sleep(CLEAN_PAUSE)
+
+    print(f"\nCould not delete {path}")
+    print(f"({blocked})")
+    print("\nSomething has that folder open. Usually it is the app itself --")
+    print(f"close {NAME} if it is still running. Otherwise it is an Explorer")
+    print("window showing the folder, or a terminal sitting inside it; a")
+    print("folder cannot be deleted while anything is looking at it.")
+
+    return False
+
+
 def main():
     if shutil.which("pyinstaller") is None:
         print("PyInstaller is not installed. Run: pip install pyinstaller")
@@ -285,9 +332,8 @@ def main():
 
     # Remove stale build output so the result is a clean, full rebuild.
     for stale in ("build", "dist", "installer"):
-        path = os.path.join(HERE, stale)
-        if os.path.isdir(path):
-            shutil.rmtree(path)
+        if not clean(os.path.join(HERE, stale)):
+            return 1
 
     write_version_file()
 

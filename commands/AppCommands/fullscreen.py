@@ -1,6 +1,6 @@
 """Fill the screen with an app. The opposite of `shrink`."""
 
-import apps
+import session
 import win
 from output import detail, say
 
@@ -31,9 +31,9 @@ def run(argument):
     if argument.lower().startswith("all "):
         argument = argument[4:].strip()
 
-    app = apps.find(argument)
+    app = session.resolve(argument)
     if app is None:
-        say(f"I don't know an app called {argument}.")
+        session.unknown(argument)
         return
 
     handles = win.windows_of(app)

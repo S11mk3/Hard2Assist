@@ -259,7 +259,12 @@ def understand(commands, utterance):
     # 1: a declared sentence, which outranks any single word inside it.
     index, name = _phrase(words)
     if name is not None:
-        return name, _argument(words[index:]), " ".join(words)
+        # Nothing to report as corrected: the phrase matched word for word.
+        # Handing back the utterance instead made every declared phrasing
+        # look like a mishearing that got rescued -- "what's open" logged
+        # "(heard 'what's open', taking it as 'windows')", which reads as the
+        # app being unsure about a sentence it knows perfectly well.
+        return name, _argument(words[index:]), None
 
     # 2: a command word somewhere in the sentence.
     index, name = _scan(commands, words)
@@ -338,8 +343,8 @@ def _report_unknown(commands, utterance):
                 if name in commands]
 
     if examples:
-        say(f"I don't know '{utterance}'. You can say things like "
-            f"{', or '.join(examples)}.")
+        say(f"I don't know '{utterance}'. You can say things like ")
+        detail(f"{', or '.join(examples)}.")
         return
 
     say(f"I don't know '{utterance}'.")

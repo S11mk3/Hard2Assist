@@ -1,6 +1,6 @@
 """Bring an app that is already open to the front."""
 
-import apps
+import session
 import win
 from output import detail, say
 
@@ -12,9 +12,9 @@ EXAMPLE = "focus notepad"
 
 
 def run(argument):
-    app = apps.find(argument)
+    app = session.resolve(argument)
     if app is None:
-        say(f"I don't know an app called {argument}.")
+        session.unknown(argument)
         return
 
     handles = win.windows_of(app)

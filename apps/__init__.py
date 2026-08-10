@@ -1,9 +1,10 @@
 """The catalogue of everything Hard2Assist can open.
 
-Four sources, searched in this order:
+Five sources, searched in this order:
 
     system     apps built into Windows          apps/system.py
     mine       apps the user picked manually    %APPDATA%\\Hard2Assist\\my-apps.json
+    folder     Documents, Downloads and friends apps/folders.py
     installed  found in the Start Menu          apps/installed.py
     web        websites                         apps/websites.py
 
@@ -14,7 +15,7 @@ so that manually correcting a bad match takes priority.
 
 import difflib
 
-from . import installed, system, websites
+from . import folders, installed, system, websites
 
 _catalogue = None
 
@@ -26,6 +27,13 @@ def all_apps():
         _catalogue = (
             list(system.APPS)
             + installed.mine()
+
+            # After the user's own picks, so that saying "open music" and
+            # pointing at Spotify keeps meaning Spotify. Before the Start
+            # Menu scan, so a stray shortcut named "Downloads" cannot shadow
+            # the real Downloads folder.
+            + folders.known()
+
             + installed.scan()
             + list(websites.SITES)
         )
@@ -86,6 +94,7 @@ def find(spoken):
 # not by how the catalogue is searched.
 KINDS = (
     ("system", "Built into Windows"),
+    ("folder", "Folders on this PC"),
     ("mine", "Programs you pointed me at"),
     ("installed", "Installed on this PC"),
     ("web", "Websites"),

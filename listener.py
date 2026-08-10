@@ -45,6 +45,23 @@ SETUP = "Setting up"
 PAD_SECONDS = 0.5
 
 
+_current = None
+
+
+def current():
+    """The Listener that owns the microphone, or None if it is not open.
+
+    For commands that need to hear an answer of their own -- `dictate` keeps
+    listening until it is told to stop. The setup conversation reaches its
+    Listener through wizard.use(), which is registered for it at startup; a
+    command has nothing registered for it, and this module is the one that
+    knows which Listener currently holds the microphone.
+
+    Only ever one at a time, so a module global is the honest shape.
+    """
+    return _current
+
+
 def strip_prefix(text, prefix):
     """Extract the command from an utterance.
 
@@ -144,6 +161,8 @@ class Listener:
 
     def run(self):
         """Open the microphone and listen until stop() is called."""
+        global _current
+
         recognizer = sr.Recognizer()
 
         try:
@@ -189,6 +208,11 @@ class Listener:
                 self._recognizer = recognizer
                 self._source = source
 
+                # Published for current(), alongside the two attributes
+                # listen_once() needs: from here on there is a microphone to
+                # listen through.
+                _current = self
+
                 try:
                     # Setup runs while _running is still False, so the speech
                     # pause hooks stay quiet and the conversation owns the
@@ -208,6 +232,7 @@ class Listener:
                     # Cleared before the handler below reports, so that the
                     # speech pause hooks cannot overwrite a failure message.
                     self._running = False
+                    _current = None
         except Exception as e:
             self.on_status("Microphone stopped")
             say(f"The microphone stopped working: {e}")
