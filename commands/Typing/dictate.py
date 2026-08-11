@@ -26,6 +26,21 @@ ALIASES = ("dictation", "dictating", "dictates", "dictated")
 PHRASES = ("start typing", "take a note", "take notes", "start dictating")
 HELP = "dictate      -- type everything you say until you say stop dictating"
 
+ABOUT = """\
+Dictate types everything you say, with no wake word needed, until you tell
+it to stop.
+It is for paragraphs; "type" is for a line. "take a note" and "start
+typing" start it too.
+Say "{prefix} stop dictating" to finish. That one sentence needs the wake
+word, because everything else you say is being typed. A bare "stop" is
+deliberately not enough -- it ends ordinary sentences too. Said on the end
+of a line, the line is typed first and nothing is lost.
+It also stops by itself after a while of silence, so a microphone that
+stops working never traps it.
+Each line is typed as you finish saying it, and shown here rather than
+read back.\
+"""
+
 # What ends dictation, said after the wake word: "computer stop dictating".
 #
 # The wake word is the whole point of the phrase. Dictation types everything it

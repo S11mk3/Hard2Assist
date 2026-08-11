@@ -9,6 +9,15 @@ TAKES_ARG = False
 ALIASES = ("batery", "batteries")
 HELP = "battery      -- how much charge is left"
 
+ABOUT = """\
+Battery says how much charge is left, and whether it is charging.
+"how much battery is left" and "how much charge" both reach it.
+When Windows can estimate the time remaining I say that as well, but it
+refuses to guess for the first minute or two after unplugging, so I leave
+it out rather than reading back a made-up number.
+On a desktop with no battery, I say so.\
+"""
+
 
 def run():
     state = psutil.sensors_battery()

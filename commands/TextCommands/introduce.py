@@ -43,6 +43,15 @@ PHRASES = ("who are you", "what are you", "who is this",
 
 HELP = "introduce    -- what I am and who made me ('who are you')"
 
+ABOUT = """\
+Introduce says what I am: my name, what I do, who made me, and what I am
+built from.
+"who are you", "introduce yourself", "who made you" and "tell me about
+yourself" all reach it.
+The short version is spoken; the version number, the wake word and where
+your settings are kept are written here.\
+"""
+
 MAKER = "Andrija Simic"
 
 # Kept in step with build.py, which is where a release sets the version.

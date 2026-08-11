@@ -21,6 +21,13 @@ PHRASES = ("full screen",)
 HELP = "fullscreen <app> -- fill the screen with an app ('shrink' puts it back)"
 EXAMPLE = "fullscreen notepad"
 
+ABOUT = """\
+Fullscreen fills the screen with an app, the same as its maximise button.
+"maximize notepad", "full screen notepad" and "fullscreen it" all work.
+Every window that app has is maximised, not only the one in front.
+Say "shrink" or "exit fullscreen" to put it back to its normal size.\
+"""
+
 
 def run(argument):
     argument = argument.strip()

@@ -10,6 +10,19 @@ ALIASES = ("focussed", "focused", "folks", "switch", "show")
 HELP = "focus <app>  -- bring an open app to the front"
 EXAMPLE = "focus notepad"
 
+ABOUT = """\
+Focus brings an app that is already open to the front, even if it was
+minimised.
+"show notepad" and "switch to notepad" mean the same thing.
+It picks that app's most recently active window -- the one alt-tab would
+reach.
+The app has to be open already: if it isn't, I tell you so rather than
+opening it behind your back. Say "open" for that.
+Windows does not allow a background program to take the foreground in
+every situation. When it refuses I say so, and the app's taskbar button
+flashes instead.\
+"""
+
 
 def run(argument):
     app = session.resolve(argument)

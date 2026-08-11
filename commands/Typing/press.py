@@ -10,6 +10,15 @@ ALIASES = ("hit", "tap", "pressed", "presses")
 HELP = "press <key>  -- press a key or shortcut: enter, tab, escape, save, copy, paste"
 EXAMPLE = "press enter"
 
+ABOUT = """\
+Press taps a single key, or a keyboard shortcut, in the window in front.
+Keys: enter, tab, escape, space, backspace, delete, home, end, and the
+four arrow keys -- "press up", "press left".
+Shortcuts: save, copy, paste, cut, undo, redo, select all, find, print,
+new tab, close tab.
+"press the enter key" works as well as "press enter".\
+"""
+
 CTRL = win.VK_CONTROL
 
 # What each spoken name presses. The shortcuts are here rather than as

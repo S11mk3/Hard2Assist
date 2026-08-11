@@ -12,6 +12,16 @@ ALIASES = ("kil", "keel", "killed")
 HELP = "kill <app>   -- force an app to stop, without saving ('kill all <app>' for every one)"
 EXAMPLE = "kill notepad"
 
+ABOUT = """\
+Kill forces an app to stop immediately, without letting it save anything.
+It is what to use when an app has stopped responding, or when "close" is
+refused. Anything unsaved in it is lost, so try "close" first.
+Plain "kill notepad" stops the one opened most recently; "kill all
+notepad" stops every one.
+I refuse to kill the Windows shell, because that would take the taskbar
+and the desktop with it.\
+"""
+
 
 def run(argument):
     argument = argument.strip()

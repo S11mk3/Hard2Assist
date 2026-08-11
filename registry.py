@@ -4,7 +4,15 @@ A command module is any .py file under commands/<group>/ that defines:
 
     NAME      -- the word the user says
     TAKES_ARG -- True if the rest of the sentence is passed to run()
+    ARG_OPTIONAL -- optional; with TAKES_ARG, lets the command run with
+                 nothing after it, receiving "". For commands that are
+                 useful either way: `help` lists everything, `help open`
+                 explains one command.
     HELP      -- one line shown by the `help` command
+    ABOUT     -- optional; the fuller explanation `help <command>` shows.
+                 Its first sentence is spoken, so write one that stands on
+                 its own; the rest is only written. "{prefix}" anywhere in
+                 the text becomes the live wake word.
     ALIASES   -- optional; single words the recogniser commonly returns
                  instead. Single words only: they are matched a word at a
                  time, so a multi-word alias could never match.
@@ -176,31 +184,35 @@ def _scan(commands, words):
     considered, so "can you show me the time" reaches `time` rather than
     being caught by "show", which `focus` declares as an alias.
 
-    Returns (index of the command word, name), or (None, None).
+    Returns (index of the command word, name, exact), or (None, None, False).
+    `exact` says whether the word was a real command name rather than an
+    alias -- understand() weighs the two differently against a phrase.
     """
     for i, word in enumerate(words):
         if word in commands:
-            return i, word
+            return i, word, True
 
     for i, word in enumerate(words):
         if word in _aliases:
-            return i, _aliases[word]
+            return i, _aliases[word], False
 
-    return None, None
+    return None, None, False
 
 
 def _phrase(words):
     """Find a declared PHRASES sentence inside the utterance.
 
-    Returns (index just past the phrase, name), or (None, None).
+    Returns (where the phrase starts, where it ends, name), or
+    (None, None, None). The start is what lets understand() tell whether a
+    command word was spoken before the phrase or inside it.
     """
     for phrase, name in _phrases:
         length = len(phrase)
         for i in range(len(words) - length + 1):
             if tuple(words[i:i + length]) == phrase:
-                return i + length, name
+                return i, i + length, name
 
-    return None, None
+    return None, None, None
 
 
 def _argument(words):
@@ -248,6 +260,17 @@ def understand(commands, utterance):
     talking" asks for `quiet`; matching the word "stop" first would quit the
     app instead -- the same trap that made multi-word ALIASES unworkable.
 
+    With one exception: a real command name spoken *before* the phrase keeps
+    the sentence, and the phrase becomes part of its argument. "help full
+    screen" is a question about `fullscreen`, not a request to maximise
+    something -- and without this it reached `fullscreen` with no argument
+    and was answered with "'fullscreen' needs something after it". The same
+    rule lets "type stop talking" type the words instead of going quiet.
+
+    Only exact names count for that, never aliases: aliases are loose enough
+    ("show", "hide", "space", "voice") that "show me what's open" would stop
+    meaning `windows` and start meaning `focus`.
+
     Fuzzy matching stays last and stays limited to the first word. Running it
     over every word in a sentence turns ordinary filler into a command often
     enough to be worse than not matching at all.
@@ -256,18 +279,22 @@ def understand(commands, utterance):
     if not words:
         return None, None, None
 
-    # 1: a declared sentence, which outranks any single word inside it.
-    index, name = _phrase(words)
-    if name is not None:
+    start, after, phrase_name = _phrase(words)
+    index, name, exact = _scan(commands, words)
+
+    # 1: a declared sentence, which outranks any single word inside it --
+    #    unless a command was named ahead of it. A phrase starting level with
+    #    the command word still wins, which is what keeps "stop talking"
+    #    meaning `quiet` and "close yourself" meaning `stop`.
+    if phrase_name is not None and not (exact and index < start):
         # Nothing to report as corrected: the phrase matched word for word.
         # Handing back the utterance instead made every declared phrasing
         # look like a mishearing that got rescued -- "what's open" logged
         # "(heard 'what's open', taking it as 'windows')", which reads as the
         # app being unsure about a sentence it knows perfectly well.
-        return name, _argument(words[index:]), None
+        return phrase_name, _argument(words[after:]), None
 
     # 2: a command word somewhere in the sentence.
-    index, name = _scan(commands, words)
     if name is not None:
         corrected = words[index] if words[index] != name else None
         argument = _argument(words[index + 1:])
@@ -399,7 +426,10 @@ def dispatch(commands, utterance):
     module = commands[name]
 
     if getattr(module, "TAKES_ARG", False):
-        if not argument:
+        # ARG_OPTIONAL commands do something sensible with nothing after
+        # them, so being told they need an argument would be a lie: `help`
+        # on its own is the command's main use, not a mistake.
+        if not argument and not getattr(module, "ARG_OPTIONAL", False):
             say(f"'{module.NAME}' needs something after it, like "
                 f"{usage(module)}.")
             return None

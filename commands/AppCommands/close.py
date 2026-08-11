@@ -14,6 +14,18 @@ ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
 HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"
 EXAMPLE = "close notepad"
 
+ABOUT = """\
+Close asks an app to close, the same as clicking its X, so it can prompt
+you to save first.
+Plain "close notepad" closes the notepad opened most recently, so closing
+one by voice leaves the one you were already working in alone. Say
+"close all notepad" to close every one of them.
+"close it" closes whatever you last named.
+An app running as administrator cannot be closed this way -- Windows
+blocks it, and I say so rather than pretending. Start me as
+administrator to control those, or use "kill", which usually still works.\
+"""
+
 
 def run(argument):
     argument = argument.strip()

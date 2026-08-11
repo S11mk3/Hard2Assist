@@ -9,6 +9,14 @@ TAKES_ARG = False
 ALIASES = ("disc", "storage", "space", "drive")
 HELP = "disk         -- how much drive space is free"
 
+ABOUT = """\
+Disk says how much space is free on your main drive.
+"how much space is left" and "storage" reach it too.
+Every other drive is written here underneath, with how full each one is.
+An empty card reader or DVD drive is skipped rather than reported as
+zero.\
+"""
+
 
 def run():
     reported = []

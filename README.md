@@ -113,7 +113,9 @@ you want:
 | `computer volume up` | louder. `down` and `mute` too |
 | `computer search how to cook rice` | opens the results in your browser |
 | `computer introduce` | 🔊 *"I'm Hard2Assist, a voice assistant for Windows, made by Andrija Simic…"*. `who are you` works too |
-| `computer help` | lists everything it knows |
+| `computer help` | lists every command on screen |
+| `computer help apps` | lists everything it can open — programs, folders, websites |
+| `computer help open` | explains one command in full. Any command name works |
 | `computer customize` | change the wake word and how it listens |
 | `computer stop` | quits |
 
@@ -222,12 +224,24 @@ TAKES_ARG = False
 ALIASES = ("greeting", "great")   # what the recogniser might hear instead
 HELP = "greet        -- say hello"
 
+ABOUT = """\
+Greet says hello back.
+Shown by "{prefix} help greet", where the first sentence is spoken and the
+rest is only written.\
+"""
+
 def run():
     say("Hello!")
 ```
 
 It is picked up on the next start and `help` lists it automatically. Use
-`TAKES_ARG = True` and `run(argument)` to receive the rest of the sentence.
+`TAKES_ARG = True` and `run(argument)` to receive the rest of the sentence,
+and add `ARG_OPTIONAL = True` if it should also run with nothing after it.
+
+`ABOUT` is optional — without one, `computer help greet` still answers, using
+the `HELP` line and the example. With one, that page is as long as the command
+deserves. `{prefix}` inside it becomes whatever the wake word currently is, so
+an explanation never tells someone to say a word that no longer works.
 
 **`say()` writes and speaks. `detail()` only writes.** Speaking is the default so a new
 command is never accidentally silent — reach for `detail()` only when the output is a

@@ -14,6 +14,13 @@ ALIASES = ("silent", "shush")
 PHRASES = ("stop talking", "stop speaking", "shut up", "stop the voice")
 HELP = "quiet        -- stop speaking replies ('speak' turns it back on)"
 
+ABOUT = """\
+Quiet stops me reading my replies out loud. I keep listening, and I keep
+writing everything here.
+"stop talking", "shut up" and "be quiet" all work.
+Say "speak" to turn the voice back on.\
+"""
+
 
 def run():
     if not speech.available():

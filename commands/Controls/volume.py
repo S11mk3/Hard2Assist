@@ -10,6 +10,18 @@ ALIASES = ("vol", "sound", "volumes")
 HELP = "volume up|down|mute|<number> -- change the volume"
 EXAMPLE = "volume 50"
 
+ABOUT = """\
+Volume changes how loud this PC is.
+"volume up" and "volume down" move it a few notches at a time; "louder"
+and "quieter" do the same. "volume mute" silences it, and saying it again
+brings the sound back.
+For an exact level, give a number: "volume 50", "volume fifty", "volume
+fifty percent", "volume twenty five". "volume max" and "volume half" work
+too.
+The sentence can go the other way round -- "turn up the volume" and "mute
+the volume" both land here.\
+"""
+
 # Each key tap moves the volume one notch, which is 2% on Windows. Five taps
 # is a noticeable step without being a jump.
 STEPS = 5
