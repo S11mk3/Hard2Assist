@@ -20,8 +20,8 @@ instantly, so it takes about half a second to answer.\
 
 
 def run():
-    # Sample over a short interval; without one, cpu_percent() returns the
-    # average since some arbitrary earlier call, which is meaningless here.
+    # cpu_percent() with no interval returns the average since some arbitrary
+    # earlier call, so sample over a moment instead.
     cpu = psutil.cpu_percent(interval=0.4)
     memory = psutil.virtual_memory()
 

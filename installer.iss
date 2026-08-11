@@ -6,12 +6,10 @@
 ;
 ; Needs Inno Setup 6.3 or newer (free, no account): https://jrsoftware.org/isdl.php
 ;
-; The installer is deliberately unprivileged. It defaults to a per-user
-; install under %LOCALAPPDATA%\Programs, which needs no administrator rights
-; and raises no UAC prompt -- the user can still choose an all-users install
-; from the first page if they want one. Asking for administrator rights that
-; an app does not need is the single most common way an installer becomes a
-; security problem, and Hard2Assist needs none: it writes only to its own
+; Unprivileged. It defaults to a per-user install under
+; %LOCALAPPDATA%\Programs, which needs no administrator rights and raises no
+; UAC prompt; the user can still choose an all-users install from the first
+; page. Hard2Assist needs no elevation at all -- it writes only to its own
 ; folder and to %APPDATA%.
 
 #define AppName "Hard2Assist"
@@ -96,8 +94,7 @@ WelcomeLabel2=This will install [name/ver] on your computer.%n%nHard2Assist list
 
 
 [Tasks]
-; Unchecked by default, which is the Windows convention -- an installer that
-; puts an icon on the desktop uninvited is a small act of rudeness.
+; Unchecked by default, which is the Windows convention.
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 
@@ -126,15 +123,13 @@ Type: dirifempty; Name: "{app}"
 
 [Code]
 { The user's settings and saved apps live in %APPDATA%\Hard2Assist, separately
-  from the installation. Deleting them silently would throw away a wake word
-  and an app list the user set up by hand, so ask -- and default to keeping
-  them, because a reinstall is far more common than a goodbye.
+  from the installation, so the uninstaller asks before removing them. The
+  default is to keep them.
 
   SuppressibleMsgBox rather than MsgBox: a plain MsgBox is shown even during a
-  /VERYSILENT uninstall, where there is nobody to answer it, and the uninstall
-  hangs on a dialog no one can see. This one returns the IDNO default instead
-  whenever message boxes are suppressed -- so an unattended uninstall keeps the
-  settings, which is the safe way to be wrong. }
+  /VERYSILENT uninstall, where nobody can answer it and the uninstall hangs on
+  a dialog no one can see. This one returns the IDNO default whenever message
+  boxes are suppressed, so an unattended uninstall keeps the settings. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: String;

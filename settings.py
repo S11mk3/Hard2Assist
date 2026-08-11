@@ -1,11 +1,8 @@
-"""Settings the user chooses out loud, saved between runs.
+"""The settings the user chooses out loud, saved between runs.
 
-Kept beside the app catalogue in %APPDATA%\\Hard2Assist. Every value has a
-default that keeps Hard2Assist working, so a missing, unreadable or
-hand-edited file degrades to sensible behaviour instead of stopping the app.
-
-Whether the file exists is also how first run is detected: no file means the
-user has never been through the setup conversation (wizard.py).
+Stored as JSON in %APPDATA%\\Hard2Assist. Every value has a default, so a
+missing or unreadable file degrades to working behaviour instead of stopping
+the app. Whether the file exists is also how first run is detected.
 """
 
 import json
@@ -20,7 +17,7 @@ DEFAULTS = {
     "listen_when": "always",    # "always" | "focused"
 }
 
-# Values a setting is allowed to take. `prefix` is free text, checked by
+# The values each setting may take. `prefix` is free text, checked by
 # valid_prefix() instead.
 CHOICES = {
     "listen_when": ("always", "focused"),
@@ -30,16 +27,16 @@ _values = None
 
 
 def valid_prefix(word):
-    """Whether a word can serve as the wake word.
+    """Whether a word can serve as the wake word: letters only, three or more.
 
-    Letters only and at least three of them: recognition returns short
-    fragments constantly, and a one or two letter wake word would fire on
-    half of what it hears.
+    Recognition returns short fragments constantly, and a one or two letter
+    wake word would fire on half of what it hears.
     """
     return bool(re.fullmatch(r"[a-z]{3,}", str(word).strip().lower()))
 
 
 def _acceptable(key, value):
+    """Whether a value read from the file is one this setting allows."""
     if key == "prefix":
         return valid_prefix(value)
     return value in CHOICES.get(key, ())
@@ -60,8 +57,8 @@ def load():
         saved = {}
 
     if isinstance(saved, dict):
-        # Anything unrecognised or out of range is ignored rather than
-        # rejected wholesale, so one bad line cannot lose the other settings.
+        # Unrecognised or out-of-range entries are ignored one at a time, so
+        # one bad line cannot lose the other settings.
         for key, value in saved.items():
             if key in DEFAULTS and _acceptable(key, value):
                 _values[key] = value
@@ -70,6 +67,7 @@ def load():
 
 
 def get(key):
+    """One setting's value."""
     return load()[key]
 
 

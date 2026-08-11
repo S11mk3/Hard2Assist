@@ -1,9 +1,9 @@
 """The Hard2Assist window.
 
-A dark, mostly hands-off window: a pulsing dot that shows whether the app is
-listening, a status line, a hint line, and a log panel that everything the
-commands say or write scrolls into. The microphone runs on a background
-thread; messages cross into the Tk thread through a queue.
+A pulsing dot showing whether the app is listening, a status line, a hint
+line, and a log panel that everything the commands say or write scrolls into.
+The microphone runs on a background thread; messages cross into the Tk thread
+through a queue.
 """
 
 import math
@@ -30,14 +30,13 @@ WINDOW_SIZE = "800x600"
 HINT_CLEAR_MS = 4000
 ICON = "H2A.ico"
 
-# How often the dot is redrawn, and how long one full breath takes. 50ms was
-# slow enough that the movement read as a series of steps rather than a glide.
+# How often the dot is redrawn, and how long one full breath takes.
 PULSE_MS = 16
 PULSE_PERIOD = 3.4
 
 # The blend is quantised to this many steps. Tk allocates a colour for every
-# distinct string it is given, so a fresh one on every frame makes the canvas
-# do far more work than the eye can see across these two narrow ranges.
+# distinct string it is given, so a fresh one per frame makes the canvas do
+# far more work than the eye can see across these two narrow ranges.
 PULSE_STEPS = 40
 
 DEFAULT_HINT = 'say "computer help" to hear what I can do'
@@ -56,6 +55,8 @@ STATES = {
 
 
 class App:
+    """The window, its widgets, and the threads feeding them."""
+
     def __init__(self, root):
         self.root = root
         self.messages = queue.Queue()
@@ -77,18 +78,18 @@ class App:
 
         self._build_widgets()
 
-        # Route everything commands say() into the log panel instead of a
-        # console (the built .exe does not have one).
+        # Route everything the commands say() into the log panel instead of a
+        # console; the built .exe does not have one.
         output.on_message(self.log_from_any_thread)
 
-        # When `open` meets a program it has never seen, it needs a file path,
-        # which cannot be dictated -- so the window provides a file picker.
+        # `open` needs a file path when it meets an unknown program, and a
+        # path cannot be dictated, so the window provides a file picker.
         ask.on_request(self.ask_for_program)
 
         self.commands = registry.load()
         if self.commands:
             # Put something in the log immediately, so the panel does not look
-            # broken before the first command is spoken.
+            # broken before the first command.
             tally = apps.counts()
             self.log(f"Ready. {len(self.commands)} commands, "
                      f"{sum(tally.values())} apps "
@@ -104,8 +105,8 @@ class App:
             may_listen=self.may_listen,
         )
 
-        # Mute the microphone while speaking, otherwise the app hears its own
-        # replies (e.g. "Closing one window") and acts on the word "close".
+        # Mute the microphone while speaking, or the app hears its own replies
+        # ("Closing one window") and acts on the word "close".
         if speech.start():
             speech.on_speaking(self.listener.pause, self.listener.resume)
         else:
@@ -123,6 +124,7 @@ class App:
     # -- layout ----------------------------------------------------------------
 
     def _build_widgets(self):
+        """Create the window and everything in it."""
         self.root.title("Hard2Assist")
         self.root.geometry(WINDOW_SIZE)
         self.root.minsize(420, 380)
@@ -143,7 +145,7 @@ class App:
         self.ring = self.canvas.create_oval(0, 0, 0, 0, outline=theme.ACCENT_DIM)
         self.dot = self.canvas.create_oval(0, 0, 0, 0, fill=theme.ACCENT, width=0)
 
-        # Both are created with no size, so give them the resting shape now --
+        # Both are created with no size, so give them the resting shape now:
         # _animate() only redraws the dot at rest when it transitions there.
         self._draw(None)
 
@@ -162,8 +164,8 @@ class App:
         tk.Frame(self.root, bg=theme.LINE, height=1).pack(fill="x", padx=22)
 
         # A plain Text widget rather than ScrolledText: a native scrollbar
-        # would be the only piece of grey Windows chrome in an otherwise dark
-        # window, and the log auto-scrolls to the end anyway.
+        # would be the only piece of grey Windows chrome in a dark window, and
+        # the log auto-scrolls to the end anyway.
         self.log_box = tk.Text(
             self.root, wrap="word", state="disabled", font=theme.LOG_FONT,
             bg=theme.PANEL, fg=theme.TEXT, insertbackground=theme.TEXT,
@@ -180,14 +182,14 @@ class App:
         """Set the title bar and taskbar icon.
 
         The .exe file carries the icon, but the running window needs it set
-        explicitly as well. Inside the bundle the .ico lives in PyInstaller's
+        explicitly too. Inside the bundle the .ico lives in PyInstaller's
         unpacked folder (sys._MEIPASS).
         """
         base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
         path = os.path.join(base, ICON)
 
         if not os.path.isfile(path):
-            # Not worth failing over; the window just gets the default icon.
+            # Not worth failing over; the window gets the default icon.
             return
 
         try:
@@ -203,12 +205,11 @@ class App:
     def _animate(self):
         """Advance the pulse and reschedule.
 
-        The phase is taken from the clock rather than added to per frame.
-        Tk delivers after() callbacks late whenever the log panel or the
-        microphone thread is busy, and a fixed step per frame turns every late
-        callback into a visible stall -- which is what made the dot stutter.
-        Reading the clock makes a late frame take a longer step instead, so
-        the breath keeps an even speed however the frames land.
+        The phase comes from the clock rather than a fixed step per frame. Tk
+        delivers after() callbacks late whenever the log panel or the
+        microphone thread is busy, and a fixed step turns every late callback
+        into a visible stall; reading the clock makes a late frame take a
+        longer step instead.
         """
         if self._listening:
             if self._pulse_start is None:
@@ -217,7 +218,7 @@ class App:
             turn = ((time.monotonic() - self._pulse_start)
                     * (2 * math.pi / PULSE_PERIOD))
 
-            # (1 - cos)/2 rather than (sin + 1)/2 so each spell of listening
+            # (1 - cos)/2 rather than (sin + 1)/2, so each spell of listening
             # opens from the resting size instead of jumping to mid-breath.
             self._draw((1 - math.cos(turn)) / 2)
 
@@ -268,9 +269,11 @@ class App:
     # -- messages between threads ----------------------------------------------
 
     def log_from_any_thread(self, text):
+        """Queue a log line from the microphone thread."""
         self.messages.put(("log", text))
 
     def status_from_any_thread(self, text, transient=False):
+        """Queue a status change from the microphone thread."""
         self.messages.put(("status", text, transient))
 
     def _drain(self):
@@ -318,14 +321,15 @@ class App:
         self._listening = text == "Listening"
 
     def _restore_hint(self):
+        """Put the default hint back after a transient message."""
         self._hint_job = None
         self.hint.set(DEFAULT_HINT)
 
     def _watch_speech(self):
-        """Report it in the log if the voice stops working.
+        """Report it in the log if the voice stops working, then reschedule.
 
         Failing silently would leave the user wondering whether the app heard
-        them at all, so speech problems are surfaced as soon as they happen.
+        them at all.
         """
         problem = speech.error()
         if problem and problem != self._last_speech_error:
@@ -345,7 +349,7 @@ class App:
     # -- running commands ------------------------------------------------------
 
     def may_listen(self):
-        """Whether the 'listen only while in focus' setting is satisfied.
+        """Whether the "listen only while in focus" setting is satisfied.
 
         Read live rather than captured at startup, so changing it through
         `customize` takes effect straight away.
@@ -370,9 +374,9 @@ class App:
     def ask_for_program(self, name):
         """Open the file picker and wait for the chosen path.
 
-        Called from the microphone thread, but tkinter dialogs must run on
-        the thread that owns the window -- so the dialog is scheduled with
-        after() and this thread blocks on an event until it is answered.
+        Called from the microphone thread, but tkinter dialogs must run on the
+        thread that owns the window: the dialog is scheduled with after() and
+        this thread blocks on an event until it is answered.
         """
         answer = {}
         done = threading.Event()
@@ -389,12 +393,13 @@ class App:
 
         self.root.after(0, show)
 
-        # Time out eventually so a dialog left open forever does not wedge
+        # Time out eventually, so a dialog left open forever does not wedge
         # the command thread for the rest of the session.
         done.wait(timeout=180)
         return answer.get("path") or None
 
     def quit(self):
+        """Stop the microphone and the voice, then close the window."""
         self.listener.stop()
         speech.stop()
         # Discard anything logged from here on: the widgets are being torn
@@ -404,6 +409,7 @@ class App:
 
 
 def run():
+    """Open the window and run until it is closed."""
     root = tk.Tk()
     App(root)
     root.mainloop()

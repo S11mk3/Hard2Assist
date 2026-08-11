@@ -1,14 +1,12 @@
 """Keep typing everything you say, until you say "computer stop dictating".
 
-The wake word is dropped for the duration. Saying "computer type" before every
-sentence is fine for one line and unusable for a paragraph, which is the whole
-reason this exists alongside `type`. It comes back for the one sentence that
-ends dictation, because that is the sentence which must never be mistaken for
-something to type -- see STOP_PHRASES.
+The wake word is dropped for the duration, and comes back only for the
+sentence that ends dictation -- see STOP_PHRASES. That is what `type` cannot
+offer: a wake word before every sentence is unusable for a paragraph.
 
-Listening for its own answers is allowed here for the same reason the setup
-conversation is allowed it: both run on the microphone thread, which already
-owns the open audio source. See listener.listen_once().
+Listening for its own answers is safe here because this runs on the
+microphone thread, which already owns the open audio source. See
+listener.listen_once().
 """
 
 import re
@@ -43,18 +41,15 @@ read back.\
 
 # What ends dictation, said after the wake word: "computer stop dictating".
 #
-# The wake word is the whole point of the phrase. Dictation types everything it
-# hears, so its exit has to be something that cannot turn up in what is being
-# dictated -- and a bare "stop" is not: it ends ordinary sentences ("the bus
-# came to a stop", "I asked him to stop"), and every one of them ended the
-# session instead of being typed. Nobody dictates "computer stop dictating" by
-# accident, so the phrase can be recognised wherever it appears without ever
-# eating a real line.
+# Dictation types everything it hears, so its exit has to be something that
+# cannot turn up in what is being dictated. A bare "stop" ends ordinary
+# sentences ("the bus came to a stop"); the wake word in front is what makes
+# the phrase impossible to dictate by accident.
 STOP_PHRASES = ("stop dictating", "stop dictation", "stop typing", "stop")
 
 # Politeness allowed on either side of the phrase, so "computer please stop
-# dictating now" works. Safe to be generous here for the same reason: the wake
-# word in front is what makes the whole thing a command rather than a sentence.
+# dictating now" works. Generous, because the wake word in front is what makes
+# the whole thing a command rather than a sentence.
 FILLER = ("please", "now", "just", "can you", "could you", "would you",
           "you", "i want you to")
 
@@ -65,11 +60,9 @@ TIMEOUT = 12
 
 # Consecutive silences before it gives up on its own.
 #
-# This is the escape hatch, and it is not optional. Dictation holds the
-# command lock on the microphone thread for as long as it runs, so nothing
-# else can be said while it does -- not `stop`, not `quiet`. An unbounded loop
-# on a microphone that has stopped working would need Task Manager to get out
-# of.
+# The escape hatch. Dictation holds the command lock on the microphone thread
+# for as long as it runs, so nothing else can be said while it does -- not
+# `stop`, not `quiet`.
 MAX_SILENCE = 3
 
 
@@ -85,17 +78,13 @@ def run():
     if target is None:
         return
 
-    # The wake word comes from settings rather than the word "computer", so the
-    # sentence still names the phrase that works after `customize` has changed
-    # it. Being told to say something that no longer ends dictation would be
-    # worse than not being told at all.
+    # From settings rather than the literal word "computer", so the sentence
+    # names the phrase that actually works after `customize`.
     say(f"Dictating into {target}. Say {settings.get('prefix')} stop dictating "
         f"when you're done.")
 
     # Without this the microphone opens while that sentence is still playing,
-    # and the app hears its own "say computer stop dictating" and stops
-    # immediately. The setup conversation waits before every question for the
-    # same reason.
+    # and the app hears its own "say computer stop dictating" and stops.
     speech.wait()
 
     typed = _listen(ears)
@@ -110,15 +99,13 @@ def run():
 def _stop_pattern():
     """Matches the exit phrase where it ends an utterance.
 
-    Anchored to the end rather than matched anywhere, so a line that quotes the
-    phrase mid-sentence is still typed. It has to reach past the end of a
-    sentence at all because one utterance is not always one sentence: the
-    recogniser groups by pauses, so a phrase said straight after a line arrives
-    joined onto it -- "and that's the last of them computer stop dictating".
+    Anchored to the end, so a line quoting the phrase mid-sentence is still
+    typed. It has to reach past the end of a sentence because one utterance is
+    not always one sentence: the recogniser groups by pauses, so a phrase said
+    straight after a line arrives joined onto it.
 
-    Built per call rather than once at import, so a wake word changed through
-    `customize` takes effect on the next thing said rather than at the next
-    restart. The main loop reads it every utterance for the same reason.
+    Built per call rather than at import, so a wake word changed through
+    `customize` takes effect on the next thing said.
     """
     prefix = re.escape(settings.get("prefix"))
 
@@ -179,9 +166,8 @@ def _listen(ears):
                 return typed
             continue
 
-        # Written, never spoken. Reading each line back would double the
-        # length of every dictation session and make it hard to keep a train
-        # of thought.
+        # Written, never spoken: reading each line back would make it hard to
+        # keep a train of thought.
         detail(f"  > {text}")
 
         if not spoken.type_out(text):

@@ -4,17 +4,10 @@
     computer help apps       everything I can open
     computer help open       what `open` does, and how to say it
 
-Split into three because one list was doing three jobs: the commands, a set
-of example sentences and the whole app catalogue arrived together, and the
-part you actually wanted scrolled past with the rest. The apps moved behind
-`help apps`, and the examples are gone -- `help <command>` says how each one
-is spoken, at the moment you ask about it, which is what the examples were
-for.
-
-The explanations live in each command's own ABOUT, not in a table here, for
-the same reason the command list is generated: a central list is a list that
-drifts. A command dropped into %APPDATA% with no ABOUT still gets a page,
-built from its HELP line and its EXAMPLE.
+The explanations live in each command's own ABOUT rather than in a table
+here, so a page cannot drift out of step with the command it describes. A
+command dropped into %APPDATA% with no ABOUT still gets a page, built from
+its HELP line and its EXAMPLE.
 """
 
 import difflib
@@ -68,8 +61,8 @@ MAX_WIDTH = 24
 GAP = "  "
 
 # How close an unknown topic must be to a command name to be offered as a
-# suggestion. Looser than the registry's own matching, which has already had
-# its turn by the time this runs -- this only produces advice.
+# suggestion. Looser than the registry's own matching, since this only
+# produces advice.
 SUGGEST_CUTOFF = 0.6
 
 
@@ -126,9 +119,8 @@ def _lines(module, prefix):
     if not about:
         return [f"{module.NAME.capitalize()} -- {_summary(module)}."]
 
-    # Not str.format(): an ABOUT is prose, and a stray brace in it would
-    # raise rather than print. Only this one placeholder is substituted, so
-    # an explanation cannot name a wake word the user has changed.
+    # replace() rather than str.format(): an ABOUT is prose, and a stray
+    # brace in it would raise instead of printing.
     return about.replace("{prefix}", prefix).splitlines()
 
 
@@ -168,10 +160,8 @@ def apps_page():
 def _spoken(lines):
     """The part of an explanation worth hearing: its first sentence.
 
-    A sentence rather than a first line, because where a line ends is a
-    matter of how the text was wrapped in the source file -- speaking
-    lines[0] read out "Open launches anything I can name: an app, a program
-    from your Start Menu," and stopped there.
+    A sentence rather than a first line, because where a line ends is only a
+    matter of how the ABOUT text happens to be wrapped in its source file.
     """
     text = " ".join(line.strip() for line in lines if line.strip())
 
@@ -238,10 +228,7 @@ def run(argument=""):
 
     # The registry's own matching, so every way of naming a command reaches
     # its page: `help clothes` explains `close`, and `help full screen`
-    # explains `fullscreen`. Spoken phrasings work here only because
-    # understand() lets a command word spoken first keep the sentence --
-    # otherwise "full screen" would be matched as a phrase and maximise
-    # something instead of explaining how to.
+    # explains `fullscreen`.
     name, _, _ = registry.understand(commands, topic)
 
     if name is None:

@@ -8,9 +8,9 @@ Five sources, searched in this order:
     installed  found in the Start Menu          apps/installed.py
     web        websites                         apps/websites.py
 
-The `open`, `close` and `kill` commands do not distinguish between them --
-everything goes through find(). User picks come before the Start Menu scan
-so that manually correcting a bad match takes priority.
+`open`, `close` and `kill` do not distinguish between them: everything goes
+through find(). User picks come before the Start Menu scan, so that manually
+correcting a bad match takes priority.
 """
 
 import difflib
@@ -28,10 +28,9 @@ def all_apps():
             list(system.APPS)
             + installed.mine()
 
-            # After the user's own picks, so that saying "open music" and
-            # pointing at Spotify keeps meaning Spotify. Before the Start
-            # Menu scan, so a stray shortcut named "Downloads" cannot shadow
-            # the real Downloads folder.
+            # After the user's own picks, so "open music" pointed at Spotify
+            # keeps meaning Spotify. Before the Start Menu scan, so a stray
+            # shortcut named "Downloads" cannot shadow the real folder.
             + folders.known()
 
             + installed.scan()
@@ -49,7 +48,7 @@ def refresh():
 def find(spoken):
     """Return the App the user asked for, or None.
 
-    Deliberately forgiving: Start Menu shortcuts carry version numbers and
+    Forgiving by design: Start Menu shortcuts carry version numbers and
     branding ("CCleaner 7", "Visual Studio Code") that nobody says out loud,
     so an exact match alone would miss most installed programs.
 
@@ -67,14 +66,14 @@ def find(spoken):
         if app.matches(spoken):
             return app
 
-    # 2. Prefix: "ccleaner" should find "ccleaner 7". Shortest name wins
-    #    as the closest fit.
+    # 2. Prefix: "ccleaner" finds "ccleaner 7". Shortest name wins as the
+    #    closest fit.
     starts = [a for a in catalogue if a.name.startswith(spoken)]
     if starts:
         return min(starts, key=lambda a: len(a.name))
 
-    # 3. Substring: "obs" inside "obs studio" -- but only for words long
-    #    enough that the match is unlikely to be a coincidence.
+    # 3. Substring: "obs" inside "obs studio", but only for words long enough
+    #    that the match is unlikely to be a coincidence.
     if len(spoken) >= 4:
         contains = [a for a in catalogue if spoken in a.name]
         if contains:
@@ -89,9 +88,9 @@ def find(spoken):
     return None
 
 
-# The catalogue's sources, with the labels `help` shows them under, in the
-# order they are listed. Ordered by how likely the user is to want the group,
-# not by how the catalogue is searched.
+# The catalogue's sources, with the labels `help apps` shows them under, in
+# the order they are listed. Ordered by how likely the user is to want the
+# group, not by how the catalogue is searched.
 KINDS = (
     ("system", "Built into Windows"),
     ("folder", "Folders on this PC"),
@@ -104,17 +103,12 @@ KINDS = (
 def names_by_kind():
     """Names grouped by where they came from, as [(label, names)].
 
-    Canonical names only; aliases and misspellings stay hidden from `help`.
-
-    `help` reads better split up than as one run of 140 names: which of them
-    are Windows' own, which were found on this PC and which are websites is
-    most of what makes the list understandable.
+    Canonical names only; aliases and misspellings stay hidden.
 
     A name is listed once, under the first source that claims it -- the same
     precedence find() applies, so what is shown is what would be opened. The
-    Start Menu scan turns up plenty of apps that system.py already lists by
-    hand, so without that, notepad, paint, task manager and a dozen more would
-    each appear twice over.
+    Start Menu scan turns up plenty of apps system.py already lists by hand,
+    which would otherwise appear twice.
 
     Sorted for display. The catalogue itself stays in search order, since
     find() relies on system apps being matched before Start Menu ones.
@@ -141,10 +135,10 @@ def remember(name, path):
 
 
 def counts():
-    """Number of apps per source kind, for the GUI's startup log line.
+    """Number of apps per source kind, for the GUI's startup line.
 
     Deduplicated exactly as names_by_kind() is, so the count in the window
-    agrees with the list `help` prints instead of being sixteen higher.
+    agrees with the list `help apps` prints.
     """
     seen = set()
     tally = {}

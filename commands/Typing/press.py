@@ -21,10 +21,9 @@ new tab, close tab.
 
 CTRL = win.VK_CONTROL
 
-# What each spoken name presses. The shortcuts are here rather than as
-# commands of their own because "press save" and "computer save" would be two
-# words competing for the same meaning, and one table is easier to extend than
-# a folder of near-identical files.
+# What each spoken name presses. One table rather than a command per key: a
+# folder of near-identical files would be harder to extend, and "press save"
+# and "computer save" would compete for the same meaning.
 KEYS = {
     "enter": (win.VK_RETURN,),
     "return": (win.VK_RETURN,),
@@ -58,7 +57,7 @@ KEYS = {
 }
 
 # Offered when a key is not recognised. The whole table would be a wall of
-# words to hear read out, so this is the useful half.
+# words to hear read out, so this is the useful part of it.
 SUGGESTED = ("enter", "tab", "escape", "delete", "save", "copy", "paste",
              "undo", "select all")
 

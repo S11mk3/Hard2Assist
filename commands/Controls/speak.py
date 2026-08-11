@@ -7,8 +7,7 @@ NAME = "speak"
 TAKES_ARG = False
 ALIASES = ("speech", "talk", "voice")
 # Only the phrasings that name no command word at all. "talk again" and "you
-# can talk" need no entry -- "talk" is already an alias below, so the word scan
-# reaches them.
+# can talk" need no entry: "talk" is already an alias below.
 PHRASES = ("start talking", "start speaking")
 HELP = "speak        -- start speaking replies again"
 

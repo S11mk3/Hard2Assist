@@ -1,9 +1,9 @@
 """Programs installed on this PC.
 
 Two sources. Everything in the Start Menu is discovered automatically, so a
-freshly installed program is openable without touching any code. Anything
-not found there -- a portable exe, a shortcut with an odd name -- the user
-points at once with the file picker, and it is remembered in a JSON file.
+freshly installed program is openable without touching any code. Anything not
+found there -- a portable exe, a shortcut with an odd name -- the user points
+at once with the file picker, and it is remembered in a JSON file.
 """
 
 import json
@@ -23,8 +23,8 @@ START_MENUS = [
 ]
 
 # Start Menu folders are full of shortcuts that are not the program itself:
-# uninstallers, manuals, "visit our website" links. Launching one of those by
-# accident is confusing at best and destructive at worst, so they are skipped.
+# uninstallers, manuals, "visit our website" links. Launching one by accident
+# is confusing at best and destructive at worst, so they are skipped.
 SKIP_WORDS = (
     "uninstall", "readme", "read me", "release notes", "documentation",
     "help", "manual", "license", "licence", "website", "web site",
@@ -32,24 +32,25 @@ SKIP_WORDS = (
     "repair", "remove", "setup", "installer",
 )
 
-# Matched as whole words, plus an optional plural -- not as substrings.
-# "Revo Uninstaller" is a real program somebody installed on purpose, and a
-# plain substring test loses it to the "uninstall" entry, while still needing
-# to drop "Uninstall Revo Uninstaller" right next to it in the same folder.
+# Matched as whole words plus an optional plural, not as substrings: "Revo
+# Uninstaller" is a real program somebody installed on purpose, and a plain
+# substring test loses it to the "uninstall" entry -- while still needing to
+# drop "Uninstall Revo Uninstaller" beside it in the same folder.
 _SKIP = re.compile(
     "|".join(rf"\b{re.escape(word)}s?\b" for word in SKIP_WORDS), re.IGNORECASE
 )
 
 
 def _looks_useful(name):
+    """Whether a shortcut name is the program rather than its paperwork."""
     return _SKIP.search(name) is None
 
 
 def scan():
     """Every Start Menu shortcut, as an App.
 
-    The .lnk file itself is what gets launched -- os.startfile() follows the
-    shortcut, so its target never needs to be resolved here.
+    The .lnk file itself is what gets launched: os.startfile() follows the
+    shortcut, so its target never needs resolving here.
     """
     found = {}
 
@@ -74,7 +75,7 @@ def scan():
                     name=key,
                     launch=os.path.join(folder, file),
                     # Best effort: most programs put their name in the window
-                    # title, but closing these is not guaranteed (see README).
+                    # title, but closing these is not guaranteed.
                     title=name,
                     kind="installed",
                 )
@@ -83,6 +84,7 @@ def scan():
 
 
 def _load_user_file():
+    """The saved {name: path} entries, or {} if the file is missing or bad."""
     try:
         with open(USER_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -93,9 +95,8 @@ def _load_user_file():
 def _user_app(name, path):
     """Build the App for a user-picked program.
 
-    These are the reliable entries: the actual executable is known, so close
-    and kill can match the process by name instead of guessing from a window
-    title.
+    These are the reliable entries: the executable is known, so close and kill
+    can match the process by name instead of guessing from a window title.
     """
     process = os.path.basename(path)
     return App(

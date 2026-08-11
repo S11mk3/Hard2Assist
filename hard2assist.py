@@ -1,7 +1,7 @@
 """Hard2Assist entry point.
 
-Starts the GUI by default. Pass --console to run the same listening loop
-in the terminal instead, without a window.
+Starts the GUI by default. Pass --console to run the same listening loop in
+the terminal instead, without a window.
 """
 
 import sys
@@ -20,8 +20,8 @@ def run_console():
         say("No commands were found, so there is nothing to do.")
         return
 
-    # The startup banner and command list are informational, so they are
-    # written with detail() rather than read aloud.
+    # The banner and command list are informational, so they are written
+    # rather than read aloud.
     detail("Hard2Assist")
     detail("Commands: " + ", ".join(sorted(commands)))
 
@@ -31,21 +31,20 @@ def run_console():
             ears.stop()
 
     def on_status(text, transient=False):
-        # Transient statuses update constantly and would flood the terminal,
-        # so only persistent ones are printed.
+        # Transient statuses change constantly and would flood the terminal.
         if not transient:
             detail(text)
 
-    # No may_listen gate: console mode has no window, so there is nothing for
-    # "only listen while in focus" to mean and it always listens.
+    # No may_listen gate: console mode has no window, so "only listen while in
+    # focus" has nothing to mean and it always listens.
     ears = listener.Listener(
         on_command=on_command,
         on_status=on_status,
         on_ready=wizard.on_ready,
     )
 
-    # Pause the microphone while speaking so the assistant does not pick up
-    # and react to its own voice.
+    # Mute the microphone while speaking, so the app does not hear its own
+    # replies and act on the words in them.
     if speech.start():
         speech.on_speaking(ears.pause, ears.resume)
 

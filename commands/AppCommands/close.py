@@ -7,8 +7,8 @@ from output import detail, say
 NAME = "close"
 TAKES_ARG = True
 
-# "clothes" is what Google's recogniser returns for "close" more often
-# than not; the rest are its other frequent guesses.
+# "clothes" is what Google's recogniser returns for "close" more often than
+# not; the rest are its other frequent guesses.
 ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
 
 HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"

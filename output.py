@@ -3,14 +3,8 @@
     say(text)      written to the log AND spoken aloud
     detail(text)   written to the log only
 
-Speaking is the default so that a new command is never accidentally silent.
-detail() exists for output that would be tedious to hear: the app list behind
-`help`, the per-drive breakdown behind `disk`, or any long explanation.
-Commands should speak the short version and write the rest.
-
-Messages go through a replaceable listener rather than print() directly:
-the GUI redirects them into its log panel, and the built .exe has no console
-at all (sys.stdout is None), where a stray print() would raise.
+Messages go to a replaceable listener rather than to print(): the GUI points
+it at its log panel, and the built .exe has no console at all.
 """
 
 import sys
@@ -19,17 +13,12 @@ import speech
 
 
 def _write(text):
-    """The default sink: the terminal, in --console mode.
-
-    Guarded because window titles and Start Menu names contain characters no
-    console codepage can represent -- a braille pattern, an emoji, a CJK
-    name. Printing one raises UnicodeEncodeError, which would take the whole
-    command down for the sake of a single glyph. The GUI's log panel has no
-    such limit, so only the terminal pays for this.
-    """
+    """The default sink: the terminal, used in --console mode."""
     try:
         print(text)
     except UnicodeEncodeError:
+        # Window titles and Start Menu names contain characters no console
+        # codepage can represent. Substitute rather than let one glyph raise.
         encoding = getattr(sys.stdout, "encoding", None) or "ascii"
         print(text.encode(encoding, "replace").decode(encoding, "replace"))
 

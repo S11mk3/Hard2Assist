@@ -1,12 +1,8 @@
-"""Asking the user a question mid-command.
+"""Asking the user for a file path mid-command.
 
-Currently used for one thing: when `open` meets a program it does not know,
-it needs the program's location, and a file path cannot be dictated into a
-voice-only interface. The GUI answers by opening a file picker; console mode
-falls back to a typed prompt.
-
-Follows the same pattern as output.py: whichever interface is running
-registers a handler at startup.
+Used by `open` when it meets a program it does not know. The GUI answers with
+a file picker; console mode falls back to a typed prompt. The interface that
+is running registers its handler at startup, as in output.py.
 """
 
 import os
@@ -28,7 +24,7 @@ def for_program(name):
 
 
 def _console_ask(name):
-    """Fallback for --console mode, where there is no window to host a dialog."""
+    """Fallback for --console mode, which has no window to host a dialog."""
     try:
         path = input(f"Where is '{name}'? Paste the full path, "
                      f"or press Enter to skip: ").strip().strip('"')

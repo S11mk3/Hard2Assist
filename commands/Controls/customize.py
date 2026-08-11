@@ -21,6 +21,6 @@ from then on.\
 
 
 def run():
-    # Runs on the microphone thread, which is exactly where the conversation
-    # needs to be: the audio source is open and owned by this thread.
+    # Runs on the microphone thread, where the audio source is open and
+    # owned by this thread -- which is what the conversation needs.
     wizard.run()

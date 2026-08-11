@@ -7,9 +7,8 @@ from output import detail, say
 NAME = "minimize"
 TAKES_ARG = True
 
-# "minimise" is the British spelling and what the recogniser often returns
-# regardless of how it was said; the rest are its other frequent guesses.
-# "hide" is here as a plain synonym rather than a mishearing.
+# "minimise" is the British spelling, and what the recogniser often returns
+# however it was said. "hide" is a plain synonym rather than a mishearing.
 ALIASES = ("minimise", "minimized", "minimised", "minimizes", "hide")
 
 HELP = "minimize <app> -- send an app to the taskbar (the opposite of focus)"
@@ -28,9 +27,8 @@ Nothing is closed and nothing is lost; say "focus" to bring it back.\
 def run(argument):
     argument = argument.strip()
 
-    # `close` and `kill` take "all <app>", so the phrasing gets used here too.
-    # It is what this command does anyway, and erroring on it would be a
-    # pointless correction.
+    # `close` and `kill` take "all <app>", so the phrasing turns up here too.
+    # It is what this command does anyway.
     if argument.lower().startswith("all "):
         argument = argument[4:].strip()
 
@@ -44,9 +42,8 @@ def run(argument):
         say(f"{app.name} isn't open.")
         return
 
-    # Every window, not just the front one. Minimising is not destructive, so
-    # there is no reason to be cautious the way `close` is -- and leaving the
-    # app's other windows on screen would look like the command had failed.
+    # Every window, not just the front one: leaving the app's others on
+    # screen would look like the command had failed.
     minimized = 0
     refused = 0
     for hwnd in handles:

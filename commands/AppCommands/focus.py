@@ -36,9 +36,9 @@ def run(argument):
             f"if you want me to open it.")
         return
 
-    # windows_of() returns handles in Z-order, front first, so the first one
-    # is what alt-tab would reach: this app's most recently active window.
-    # A minimised window keeps its WS_VISIBLE style, so it is still in there.
+    # windows_of() returns handles in Z-order, front first, so the first is
+    # what alt-tab would reach: this app's most recently active window. A
+    # minimised window keeps its WS_VISIBLE style, so it is still in there.
     if win.focus_window(handles[0]):
         say(f"Showing {app.name}")
         return

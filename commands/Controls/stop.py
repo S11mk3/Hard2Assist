@@ -24,11 +24,10 @@ name = os.environ.get("USERNAME", "").strip()
 def run():
     say(f"Goodbye {name}")
 
-    # say() only queues, and the speech thread is a daemon -- so returning
-    # straight away tore the interpreter down before SAPI had played a word
-    # and the goodbye was never actually heard. Wait for it to finish.
+    # say() only queues, and the speech thread is a daemon, so returning
+    # straight away would tear the interpreter down before SAPI played a word.
     speech.wait()
 
-    # Return the sentinel so the caller can shut down cleanly and release
-    # the microphone. Calling exit() here would skip that teardown.
+    # The sentinel lets the caller shut down cleanly and release the
+    # microphone. Calling exit() here would skip that teardown.
     return registry.STOP

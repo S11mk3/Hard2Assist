@@ -2,14 +2,13 @@
 
 Runs once on first launch, and again whenever the user says `customize`.
 
-Two rules shape everything here. Every choice is explained aloud and read back
-for confirmation, because a voice interface has no other way to show what it
-understood. And no question can trap the user: after three failed attempts it
-keeps the current value, says so, and moves on, so a poor microphone costs the
-user a setting rather than the whole app.
+Every choice is explained aloud and read back for confirmation, because a
+voice interface has no other way to show what it understood. No question can
+trap the user: after three failed attempts it keeps the current value, says
+so, and moves on.
 
-Questions are asked without the wake word -- one of the things being chosen is
-the wake word, so requiring it would be circular.
+Questions are asked without the wake word, since one of the things being
+chosen is the wake word.
 """
 
 import settings
@@ -22,10 +21,10 @@ ATTEMPTS = 3
 YES = {"yes", "yeah", "yep", "yup", "correct", "right", "sure", "ok", "okay",
        "confirm", "affirmative", "that's right", "thats right", "do it"}
 
-# "know" and "now" are not answers anyone gives; they are what the recogniser
-# returns for a spoken "no" often enough to be worth absorbing, the same way
-# commands take ALIASES for their common mishearings. Nothing meaning yes
-# sounds like either, and YES is tested first, so "yes I know" is still a yes.
+# "know" and "now" are what the recogniser returns for a spoken "no" often
+# enough to be worth absorbing, as commands take ALIASES for their common
+# mishearings. Nothing meaning yes sounds like either, and YES is tested
+# first, so "yes I know" is still a yes.
 NO = {"no", "nope", "nah", "wrong", "incorrect", "negative", "cancel",
        "not right", "no thanks", "know", "now"}
 
@@ -37,9 +36,8 @@ KEEP = {"keep", "keep it", "skip", "same", "unchanged", "next", "leave it",
 def _speak(text):
     """Say something, then wait for the voice to finish.
 
-    Every prompt goes through here: speak() only queues, so without the wait
-    the question and the listening for its answer would overlap and the
-    assistant would hear itself.
+    speak() only queues, so without the wait the question and the listening
+    for its answer would overlap and the assistant would hear itself.
     """
     say(text)
     speech.wait()
@@ -110,6 +108,7 @@ def _ask(ears, opening, retry, interpret):
 
 
 def _ask_prefix(ears):
+    """Ask for the wake word and save it."""
     current = settings.get("prefix")
 
     def interpret(answer):
@@ -134,9 +133,10 @@ def _ask_prefix(ears):
 
 
 def _ask_listening(ears):
+    """Ask whether to listen always or only while in focus, and save it."""
     if ears.may_listen is None:
         # Console mode has no window, so there is nothing to be in focus and
-        # the setting would have no effect whichever way it were answered.
+        # the setting would have no effect either way.
         return
 
     current = settings.get("listen_when")
@@ -182,9 +182,9 @@ def _ask_listening(ears):
 
 QUESTIONS = (_ask_prefix, _ask_listening)
 
-# The Listener to ask through. Registered at startup, the same way output.py
-# and ask.py take their handler, so the `customize` command can start a
-# conversation without the command contract having to carry a Listener.
+# The Listener to ask through. Registered at startup, as output.py and ask.py
+# take their handlers, so the `customize` command can start a conversation
+# without the command contract having to carry a Listener.
 _ears = None
 
 
@@ -210,7 +210,7 @@ def run(first_time=False):
 
     if not speech.available():
         # The whole conversation is spoken. Without a voice the user would be
-        # answering questions they cannot hear, so keep the defaults instead.
+        # answering questions they cannot hear, so keep the defaults.
         detail("No voice on this PC, so setup was skipped and the defaults "
                "were kept. Settings live in " + settings.FILE)
         settings.save()
