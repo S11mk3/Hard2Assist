@@ -1,14 +1,11 @@
 """Say what Hard2Assist is: its name, what it does, and who made it.
 
-The spoken answer is deliberately short -- an introduction nobody can sit
-through is not an introduction. The fuller version, including the parts no
-one wants read out loud (where the settings file lives, what the app is built
-from), is written instead, the same split `help` and `disk` make.
+The short version is spoken; the details nobody wants read out loud -- where
+the settings file lives, what the app is built from -- are written.
 
-Anything that can be read at runtime is read rather than written down here:
-the wake word comes from settings, and the counts from the registry and the
-app catalogue. An introduction that named a wake word the user had already
-changed, or a command list that had grown since, would be worse than none.
+The wake word comes from settings and the counts from the registry and the
+app catalogue, so an introduction cannot name a wake word the user has
+changed or a command list that has grown since.
 """
 
 import apps
@@ -27,14 +24,11 @@ ALIASES = ("introduction", "introductions", "intro", "introducing",
 # The ways of asking that contain no command word at all. "introduce
 # yourself" needs none of them -- the command word is already in it.
 #
-# Kept as whole phrases rather than a "yourself" alias, which would have to
-# be that single word: "shut yourself down" and "close yourself" already mean
-# `stop`, and an alias would take them.
+# Whole phrases rather than a "yourself" alias, which would have to be that
+# single word: "shut yourself down" and "close yourself" already mean `stop`.
 #
-# Each one is also as long as the phrasing allows. A phrase is matched before
-# any command word and anywhere in the sentence, so a short one is a phrase
-# the user can never type or search for -- "tell me about yourself" is safe to
-# claim in a way that a bare "about yourself" is not.
+# Each is as long as the phrasing allows. A phrase is matched anywhere in a
+# sentence, so a short one is text the user can never type or search for.
 PHRASES = ("who are you", "what are you", "who is this",
            "who made you", "who created you", "who built you",
            "who wrote you", "what is your name", "what's your name",

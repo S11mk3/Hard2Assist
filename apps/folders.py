@@ -1,13 +1,12 @@
 """Folders you can open by name.
 
-The same trick that makes websites work, applied to folders: os.startfile()
-opens a folder in File Explorer exactly as it opens a program, so "computer
-open documents" goes through the same `open` as everything else and needs no
-command of its own. `close downloads` and `focus pictures` come free with it.
+os.startfile() opens a folder in File Explorer exactly as it opens a program,
+so "computer open documents" goes through the same `open` as everything else
+and needs no command of its own. `close downloads` and `focus pictures` come
+with it.
 
-Where each folder actually lives is asked of Windows rather than assumed --
-see win.known_folder(). On this PC Downloads sits on a different drive
-entirely, and every folder here can be moved the same way.
+Where each folder lives is asked of Windows rather than assumed; see
+win.known_folder().
 """
 
 import os
@@ -16,8 +15,8 @@ import win
 
 from .app import App
 
-# Known folder ids, from the Windows shell. Fixed values -- these are the
-# names Windows itself uses, not paths, which is the whole point of them.
+# Known folder ids, from the Windows shell. These are the names Windows itself
+# uses, rather than paths, which is the point of them.
 IDS = {
     "desktop": "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
     "documents": "{FDD39AD0-238F-46AF-ADB4-6C85480369C7}",
@@ -28,7 +27,7 @@ IDS = {
     "home": "{5E6C858F-0E22-4760-9AFE-EA3317B67173}",
 }
 
-# What the folder's Explorer window is titled, when it differs from the name.
+# What the folder's Explorer window is titled, where it differs from the name.
 # Explorer titles a window after the folder on disk, so the home folder shows
 # the Windows account name rather than the word "home".
 TITLES = {
@@ -50,8 +49,8 @@ def known():
     """Every known folder that exists on this PC, as Apps.
 
     A folder Windows has no path for, or one that has been deleted, is left
-    out rather than listed: a catalogue entry that fails the moment it is
-    used is worse than the app simply not knowing the word.
+    out: a catalogue entry that fails the moment it is used is worse than the
+    app not knowing the word.
     """
     found = []
 
@@ -65,18 +64,16 @@ def known():
             launch=path,
 
             # Explorer's window title is the folder name and its class is
-            # always CabinetWClass, so the two together find this folder's
-            # window in particular -- which is what lets `close downloads`
-            # close only that one and leave the other folders open.
+            # always CabinetWClass, so the two together identify this folder's
+            # window, which is what lets `close downloads` close only that one.
             title=TITLES.get(name, os.path.basename(path) or name),
             window_class="CabinetWClass",
 
             aliases=ALIASES.get(name, ()),
 
-            # Every folder window is explorer.exe, and `kill` terminates by
-            # process. Without this, "kill documents" would take the taskbar
-            # and the desktop down with it -- the same reason `file explorer`
-            # is protected in system.py.
+            # Every folder window is explorer.exe and `kill` terminates by
+            # process, so without this "kill documents" would take the taskbar
+            # and desktop down with it.
             protected=True,
 
             kind="folder",

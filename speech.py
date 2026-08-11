@@ -1,9 +1,8 @@
-"""Text-to-speech via the Windows SAPI voice.
+"""Text-to-speech through the Windows SAPI voice.
 
-All speech happens on one dedicated worker thread that owns the COM voice
-object; other threads just queue text with speak(). While something is being
-said, the registered pause hook mutes the microphone so the assistant does
-not hear and react to its own voice.
+All speech happens on one worker thread that owns the COM voice object; other
+threads queue text with speak(). While something is being said, the registered
+pause hook mutes the microphone so the app does not hear its own voice.
 """
 
 import queue
@@ -23,8 +22,8 @@ _resume_mic = None
 # How long start() waits for the worker thread to report readiness.
 START_TIMEOUT = 15
 
-# A Speak() call that returns faster than this cannot have produced audio;
-# it is treated as a silently broken voice (see _speak_once).
+# A Speak() call returning faster than this cannot have produced audio; it is
+# treated as a silently broken voice. See _speak_once().
 REAL_SPEECH_SECONDS = 0.15
 
 
@@ -47,6 +46,7 @@ def start():
 
 
 def available():
+    """Whether a voice could be created on this PC."""
     return _available
 
 
@@ -56,11 +56,12 @@ def error():
 
 
 def enabled():
+    """Whether replies are currently being spoken."""
     return _enabled and _available
 
 
 def set_enabled(value):
-    """Turn speaking on or off (the `quiet` and `speak` commands)."""
+    """Turn speaking on or off. The `quiet` and `speak` commands call this."""
     global _enabled
     _enabled = bool(value)
 
@@ -74,12 +75,11 @@ def speak(text):
 def wait(timeout=60):
     """Block until everything queued so far has been spoken.
 
-    The setup conversation needs this: it must finish asking a question before
-    it starts listening for the answer, or it hears its own voice. speak() only
-    queues, so without waiting the two would overlap.
+    The setup conversation needs this: it must finish asking a question
+    before it starts listening for the answer, or it hears itself.
 
     Works by queueing a marker behind the text and waiting for the speech
-    thread to reach it -- FIFO order means everything ahead of it is done.
+    thread to reach it; FIFO order means everything ahead of it is done.
     """
     if not enabled():
         return
@@ -104,6 +104,7 @@ def _safely(hook):
 
 
 def _new_voice():
+    """Create a SAPI voice object."""
     import comtypes.client
     return comtypes.client.CreateObject("SAPI.SpVoice")
 
@@ -116,7 +117,7 @@ def _run():
         # COM must be initialised on every thread that uses it. comtypes does
         # this on first import, but if another thread imported it first the
         # import here is a no-op and voice creation fails with "CoInitialize
-        # has not been called" -- so initialise explicitly.
+        # has not been called".
         import comtypes
         comtypes.CoInitialize()
         voice = _new_voice()
@@ -138,7 +139,7 @@ def _run():
 
         if isinstance(item, threading.Event):
             # A wait() marker rather than something to say. Reaching it means
-            # every line queued ahead of it has already been spoken.
+            # every line queued ahead of it has been spoken.
             item.set()
         else:
             if not speaking:
@@ -148,13 +149,13 @@ def _run():
             try:
                 voice = _speak_once(voice, item)
             except Exception as e:
-                # A broken voice must never crash the app, but it must not
-                # fail invisibly either; the GUI polls error() and reports it.
+                # A broken voice must not crash the app, but it must not fail
+                # invisibly either; the GUI polls error() and reports it.
                 _error = f"{type(e).__name__}: {e}"
 
         # Resume the microphone only once the queue is empty, so a run of
-        # messages does not toggle it on and off between each line. Outside the
-        # try above, so a failed line still un-deafens the app.
+        # messages does not toggle it between each line. Outside the try
+        # above, so a failed line still un-deafens the app.
         if speaking and _queue.empty():
             speaking = False
             _safely(_resume_mic)
@@ -172,8 +173,8 @@ def _speak_once(voice, text):
     """Speak one line. Returns the voice object to use for the next line.
 
     SAPI voices occasionally break silently: Speak() returns immediately
-    without producing audio. When a call returns too fast to have made a
-    sound, the voice is recreated and the line retried once, instead of the
+    without producing audio. A call that returns too fast to have made a
+    sound gets the voice recreated and the line retried once, rather than the
     app staying mute for the rest of the session.
     """
     start = time.time()

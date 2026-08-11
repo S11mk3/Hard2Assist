@@ -7,10 +7,10 @@ NAME = "quiet"
 TAKES_ARG = False
 ALIASES = ("silent", "shush")
 
-# Only phrasings the word scan cannot reach on its own. "stop talking" has to
-# be listed here because it opens with the name of the `stop` command, so
-# without it the app quits instead of going silent. "be quiet" needs no entry:
-# it contains this command's own name, so the word scan already finds it.
+# Only phrasings the word scan cannot reach. "stop talking" opens with the
+# name of the `stop` command, so without an entry here the app would quit
+# instead of going silent. "be quiet" needs none: it contains this command's
+# own name, so the word scan already finds it.
 PHRASES = ("stop talking", "stop speaking", "shut up", "stop the voice")
 HELP = "quiet        -- stop speaking replies ('speak' turns it back on)"
 

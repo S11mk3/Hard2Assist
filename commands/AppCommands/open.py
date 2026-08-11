@@ -31,8 +31,7 @@ def run(argument):
 
     if app is None:
         # "open it" with nothing to point at is a misunderstanding, not an
-        # unknown program. Opening a file picker and asking the user to find
-        # "it" on their disk would be absurd.
+        # unknown program: there is no file to ask the user to find.
         if argument.lower().strip() in session.PRONOUNS:
             session.unknown(argument)
             return
@@ -43,9 +42,9 @@ def run(argument):
 
         session.remember(app)
 
-    # os.startfile() goes through the Windows shell, which is what makes one
-    # code path work for everything: plain exes, .msc consoles, ms-settings:
-    # URIs, Start Menu .lnk shortcuts and https:// addresses alike.
+    # os.startfile() goes through the Windows shell, so one code path covers
+    # everything: plain exes, .msc consoles, ms-settings: URIs, Start Menu
+    # .lnk shortcuts and https:// addresses alike.
     try:
         os.startfile(app.launch)
     except OSError as e:

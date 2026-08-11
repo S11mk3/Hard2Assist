@@ -4,15 +4,12 @@
     computer type hello
     computer minimize it
 
-Only the App is remembered, never a window handle. Windows recycles handles,
-so a stored one can end up pointing at an unrelated window -- which is why
-win.py enumerates on demand and why this module does not try to be cleverer.
-The memory answers "which app", and the commands go on finding the windows
-themselves exactly as they do when the app is named out loud.
+Only the App is remembered, never a window handle: Windows recycles handles,
+so a stored one can end up pointing at an unrelated window. The memory answers
+"which app", and the commands find the windows themselves.
 
-A plain module global is enough. Commands run one at a time, on the microphone
-thread, under the GUI's command_lock, so nothing here is ever touched by two
-threads at once.
+A module global is enough. Commands run one at a time, on the microphone
+thread, under the GUI's command_lock.
 """
 
 import time
@@ -23,18 +20,17 @@ import win
 from output import say
 
 # Ways of saying "the thing we were just talking about". Matched against the
-# whole argument rather than word by word, so the list stays something you can
-# read and predict instead of a guessing game.
+# whole argument rather than word by word.
 #
-# Bare "one" is deliberately absent: "open one" is not something anyone says,
-# and it is close enough to real words to catch a mishearing.
+# Bare "one" is absent: "open one" is not something anyone says, and it is
+# close enough to real words to catch a mishearing.
 PRONOUNS = {
     "it", "that", "this", "them", "those", "these", "window",
     "that one", "this one", "that window", "this window", "the window",
     "current window", "same", "same one", "last one",
 }
 
-# How long a window needs after coming forward before it will accept typed
+# How long a window needs after coming forward before it accepts typed
 # characters. Without this the first few letters of a `type` land nowhere.
 FOCUS_SETTLE = 0.08
 
@@ -61,13 +57,12 @@ def forget():
 def resolve(argument):
     """The App an argument names, or the last one acted on. None if unknown.
 
-    What the window commands call instead of apps.find(). Everything they
-    already do is unchanged -- this only adds the case where the argument is
-    "it" rather than a name.
+    What the window commands call instead of apps.find(), adding the case
+    where the argument is "it" rather than a name.
 
     A leading "all " is not handled here: `close`, `kill`, `minimize`,
-    `fullscreen` and `shrink` each strip it themselves before asking, because
-    it changes what they do rather than what they do it to.
+    `fullscreen` and `shrink` strip it themselves, because it changes what
+    they do rather than what they do it to.
     """
     spoken = argument.lower().strip()
 
@@ -78,7 +73,7 @@ def resolve(argument):
 
     if app is not None:
         # Remembered on a successful lookup rather than a successful action,
-        # so "close notepad" when notepad was never running still leaves "open
+        # so "close notepad" when notepad was not running still leaves "open
         # it" meaning notepad.
         remember(app)
 
@@ -88,9 +83,8 @@ def resolve(argument):
 def unknown(argument):
     """Say why an argument resolved to nothing.
 
-    "I don't know an app called it" is a nonsense sentence, and it is the one
-    the user hears the first time they try a pronoun. Worth telling them what
-    would work instead.
+    A pronoun gets its own message: "I don't know an app called it" is
+    nonsense, and it is what the user would hear the first time they try one.
     """
     if argument.lower().strip() in PRONOUNS:
         say("I'm not sure what you mean by that yet. Name the app once and "
@@ -103,11 +97,8 @@ def unknown(argument):
 def _app_name(title):
     """The app's name out of a window title, for saying out loud.
 
-    Window titles are written to be read, not heard. "*Untitled - Notepad"
-    and "build.py - Hard2Assist - Visual Studio Code" both name the app last,
-    after the document, so speaking the whole thing reads out an asterisk and
-    a filename nobody asked about. Every other command says a plain name --
-    "Opening notepad" -- and this one should sound the same.
+    Titles name the app last, after the document -- "*Untitled - Notepad" --
+    so the whole thing would read out an asterisk and a filename.
     """
     name = title.split(" - ")[-1].strip().lstrip("*").strip()
 
@@ -118,15 +109,12 @@ def keyboard_target():
     """Make sure typed keys will land somewhere useful.
 
     Returns the name of what they will reach, or None -- having already said
-    why not, since there is only one sensible thing to say in each case.
+    why not.
 
-    Typed keys go to whatever window has focus, so most of the time there is
-    nothing to do: the user said "open notepad" a moment ago and notepad is
-    in front. The exception is our own window being in front, which is
-    permanently true under "only listen while I'm in focus". Typing into our
-    own log panel is never what was meant, so the app that was last acted on
-    is brought forward first -- which is also what makes `type` follow `open`
-    in the order the two commands are spoken.
+    Typed keys go to whatever window has focus, so usually there is nothing to
+    do. The exception is our own window being in front, which is permanently
+    true under "only listen while I'm in focus"; the app last acted on is
+    brought forward instead, which is also what makes `type` follow `open`.
     """
     if not win.foreground_is_ours():
         title = win.foreground_title()

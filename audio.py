@@ -1,15 +1,13 @@
-"""Reading and setting the exact system volume.
+"""Setting an exact system volume through the Windows Core Audio API.
 
-The media keys can only nudge the volume one notch at a time, which is no use
-for "set it to fifty" -- that requires the Windows Core Audio API, accessed
-through pycaw.
-
-COM objects are bound to the thread that created them, and commands run on
-the microphone thread, so the audio endpoint is cached per thread.
+The media keys can only nudge the volume a notch at a time, so "set it to
+fifty" needs this instead. Reached through pycaw.
 """
 
 import threading
 
+# The endpoint is a COM object, and a COM object belongs to the thread that
+# created it. Commands run on the microphone thread, so it is cached per thread.
 _local = threading.local()
 
 
@@ -22,8 +20,8 @@ def _endpoint():
     _local.endpoint = None
 
     try:
-        # COM must be initialised on this thread before any interface can
-        # be obtained (same requirement as the speech voice).
+        # COM must be initialised on a thread before it can obtain an
+        # interface, the same requirement the speech voice has.
         import comtypes
         comtypes.CoInitialize()
 
@@ -44,8 +42,7 @@ def set_level(percent):
 
     percent = max(0, min(100, int(percent)))
     try:
-        # Setting a level while muted appears broken (the volume goes up but
-        # nothing is heard), so unmute at the same time.
+        # A level set while muted takes effect silently, so unmute with it.
         if percent > 0 and endpoint.GetMute():
             endpoint.SetMute(0, None)
         endpoint.SetMasterVolumeLevelScalar(percent / 100, None)

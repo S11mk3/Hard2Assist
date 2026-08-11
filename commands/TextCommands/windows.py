@@ -15,8 +15,8 @@ TAKES_ARG = False
 ALIASES = ("window",)
 
 # The natural phrasings name no command word at all. Safe to declare even
-# though "open" is a command: a phrase is matched before any single word, so
-# "what's open" reaches here rather than running `open` with no argument.
+# though "open" is a command: a phrase outranks a command word sitting inside
+# it, so "what's open" reaches here rather than running `open`.
 PHRASES = ("what's open", "whats open", "what is open", "what's running",
            "whats running", "what do i have open")
 
@@ -72,9 +72,8 @@ def run():
         say("Nothing is open apart from me.")
         return
 
-    # Spoken as a count, written as the list -- reading a dozen window titles
-    # out loud takes longer than looking at them, the same split `help` and
-    # `disk` make.
+    # Spoken as a count, written as the list: reading a dozen window titles
+    # out loud takes longer than looking at them.
     window = "window" if len(titles) == 1 else "windows"
     say(f"{len(titles)} {window} open. They're on screen.")
 

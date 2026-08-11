@@ -3,15 +3,11 @@
     python build.py               # dist/Hard2Assist/ -- the app folder
     python build.py --installer   # ...and wrap it in Hard2Assist-Setup.exe
 
-Produces a folder containing the .exe and the Python runtime beside it, rather
-than a single self-extracting .exe. The one-file build unpacked ~67 MB into
-%TEMP% on *every* launch, which cost seconds of startup and made the app look
-like a dropper to antivirus heuristics -- a process that writes executables to
-a temp folder and runs them. A plain folder starts immediately and behaves
-like ordinary installed software.
-
-What users download is the installer built from that folder, so the "one file
-to download" property survives the change.
+Produces a folder containing the .exe with the Python runtime beside it,
+rather than a single self-extracting .exe. A one-file build unpacks the whole
+bundle into %TEMP% on every launch, which costs seconds of startup and looks
+to antivirus heuristics like a dropper. What users download is the installer
+built from that folder, so the single file to hand out still exists.
 """
 
 import os
@@ -26,7 +22,7 @@ ICON = "H2A.ico"
 NAME = "Hard2Assist"
 PUBLISHER = "Andrija Simic"
 
-# Single source of truth for the version: it is written into the .exe's
+# The single source of truth for the version. It is written into the .exe's
 # resource block below and handed to the installer script, so a release only
 # needs the number changed here.
 VERSION = "1.0.0"
@@ -37,23 +33,21 @@ INSTALLER_SCRIPT = "installer.iss"
 # Modules PyInstaller finds by static analysis but that never run.
 #
 # SpeechRecognition supports a dozen recognisers and PyInstaller cannot tell
-# which one is actually called, so it packs the dependencies of all of them.
-# Hard2Assist uses exactly two things from that library -- sr.Microphone and
-# recognize_google -- and both are pure standard library underneath
-# (urllib, wave, audioop, aifc). Nothing on that path imports any of the
-# following, so excluding them cannot break recognition:
+# which one is called, so it packs the dependencies of all of them.
+# Hard2Assist uses sr.Microphone and recognize_google, and both are pure
+# standard library underneath (urllib, wave, audioop, aifc). Nothing on that
+# path imports any of the following:
 #
 #   numpy       reached only from recognizers/whisper_local/, and there only
-#               inside `if TYPE_CHECKING:` -- it is never imported at runtime,
-#               yet it was the single largest thing in the bundle
+#               inside `if TYPE_CHECKING:`, yet the largest thing in the bundle
 #   requests    with h2/hpack/hyperframe behind it; the Google recogniser uses
 #               urllib.request instead
 #   pocketsphinx, yaml, PIL     other optional recognisers and their baggage
 #   setuptools, distutils, pkg_resources    build-time tooling
 #   unittest, pydoc, pytest     development-only
 #
-# Do NOT add comtypes.tools here. It looks like dead weight but generates the
-# SAPI typelib wrapper on first run, and without it the voice never starts.
+# comtypes.tools does not belong here. It looks like dead weight but generates
+# the SAPI typelib wrapper on first run, and without it the voice never starts.
 EXCLUDES = [
     "numpy",
     "setuptools",
@@ -71,20 +65,17 @@ EXCLUDES = [
     "pytest",
 ]
 
-# Data that PyInstaller collects because it sits inside a package directory.
-# --exclude-module cannot reach any of it: these are not imports, they are
-# files, so they have to be deleted after the build.
+# Data PyInstaller collects because it sits inside a package directory.
+# --exclude-module cannot reach any of it: these are files, not imports, so
+# they are deleted after the build.
 #
-#   pocketsphinx-data   the offline CMU Sphinx English models, and by a wide
-#                       margin the largest thing in the bundle at 38 MB -- a
-#                       28 MB language model alone. Only recognize_sphinx()
+#   pocketsphinx-data   the offline CMU Sphinx English models, 38 MB of which
+#                       28 MB is one language model. Only recognize_sphinx()
 #                       reads it, and Hard2Assist uses recognize_google().
 #   flac-linux/flac-mac SpeechRecognition ships a FLAC encoder per platform.
 #                       flac-win32.exe must stay -- every clip is encoded
-#                       through it before upload -- but Linux and macOS
-#                       executables inside a Windows app are pure weight, and
-#                       embedded foreign binaries give a scanner one more
-#                       thing to dislike.
+#                       through it before upload -- but the Linux and macOS
+#                       executables are weight a Windows app cannot use.
 UNUSED_PAYLOAD = ("pocketsphinx-data", "flac-linux", "flac-mac")
 
 OPTIONS = [
@@ -93,9 +84,8 @@ OPTIONS = [
     "--name", NAME,
     "--noconfirm",
 
-    # UPX compression is off deliberately. Packed executables are heavily
-    # associated with malware, and compressing an app that no longer unpacks
-    # itself at startup buys nothing anyway.
+    # Packed executables are heavily associated with malware, and a folder
+    # build has nothing to gain from compression anyway.
     "--noupx",
 
     # An .exe with no publisher, description or version reads as anonymous to
@@ -104,20 +94,19 @@ OPTIONS = [
 
     # The icon for the .exe file itself...
     "--icon", ICON,
-    # ...and a copy inside the bundle, because the running window sets its
-    # own title bar and taskbar icon from the file at runtime.
+    # ...and a copy inside the bundle, which the running window reads to set
+    # its own title bar and taskbar icon.
     "--add-data", f"{ICON}{os.pathsep}.",
 
     # Command modules are discovered by scanning the disk at runtime, so
-    # PyInstaller cannot see their imports and would omit them. The folder is
-    # shipped as data; registry.py knows to look for it inside the bundle.
+    # PyInstaller cannot see their imports and would omit them. The folder
+    # ships as data; registry.py knows to look for it inside the bundle.
     "--add-data", f"commands{os.pathsep}commands",
 
     # Because the command modules are invisible to PyInstaller, so is
-    # everything they import. Without these hidden imports the build succeeds
-    # but the .exe loads almost no commands. After changing this list, run
-    # the built .exe and check `computer help` still shows every command --
-    # a build missing a piece starts up looking fine.
+    # everything they import. Without these the build succeeds but the .exe
+    # loads almost no commands. After changing this list, run the built .exe
+    # and check `computer help` still shows every command.
     "--hidden-import", "apps",
     "--hidden-import", "win",
     "--hidden-import", "psutil",
@@ -143,7 +132,7 @@ for module in EXCLUDES:
 
 
 # The Windows version resource. Both version fields have to be four numbers,
-# so the VERSION above is padded out to build 0.
+# so VERSION above is padded out to build 0.
 VERSION_TEMPLATE = """\
 VSVersionInfo(
   ffi=FixedFileInfo(
@@ -196,7 +185,7 @@ def write_version_file():
 def strip_unused_payload(folder):
     """Delete the collected data listed in UNUSED_PAYLOAD.
 
-    Returns how many bytes it freed. Walks bottom-up so a directory is only
+    Returns how many bytes it freed. Walks bottom-up, so a directory is only
     considered after its contents have been measured.
     """
     freed = 0
@@ -218,6 +207,7 @@ def strip_unused_payload(folder):
 
 
 def folder_size(folder):
+    """Total size in bytes of everything under a folder."""
     total = 0
     for root, _dirs, files in os.walk(folder):
         for name in files:
@@ -228,9 +218,9 @@ def folder_size(folder):
 def find_inno():
     """The Inno Setup command line compiler, or None if it is not installed.
 
-    Inno Setup does not add itself to PATH, and it can be installed either for
+    Inno Setup does not add itself to PATH, and it installs either for
     everyone (Program Files) or for one user (%LOCALAPPDATA%\\Programs), so
-    all three places are worth a look before giving up.
+    all three places are checked.
     """
     found = shutil.which("ISCC")
     if found:
@@ -280,11 +270,10 @@ def build_installer(app_dir):
 
 # How long to keep trying to delete the previous build.
 #
-# Windows holds a folder open for as long as anything is looking at it, and the
-# ordinary way to hit that is to rebuild straight after testing: the .exe has
-# only just exited, or the folder is still showing in an Explorer window. The
-# handle is usually released within a second, so retrying turns what was a
-# traceback halfway through the delete into a pause nobody notices.
+# Windows holds a folder open for as long as anything is looking at it, which
+# a rebuild straight after testing runs into: the .exe has only just exited,
+# or the folder is still showing in an Explorer window. The handle is usually
+# released within a second.
 CLEAN_ATTEMPTS = 8
 CLEAN_PAUSE = 0.5
 
@@ -292,9 +281,8 @@ CLEAN_PAUSE = 0.5
 def clean(path):
     """Delete a previous build folder. False if Windows would not let go.
 
-    Reported rather than raised, because "the app you were just testing is
-    still running" is a normal thing to have done and deserves a sentence
-    saying so, not a stack trace ending in WinError 32.
+    Reported rather than raised: "the app you were just testing is still
+    running" deserves a sentence saying so, not a stack trace.
     """
     blocked = None
 
@@ -322,6 +310,7 @@ def clean(path):
 
 
 def main():
+    """Build the app folder, and the installer when asked."""
     if shutil.which("pyinstaller") is None:
         print("PyInstaller is not installed. Run: pip install pyinstaller")
         return 1
@@ -330,7 +319,7 @@ def main():
         print(f"{ICON} is missing -- the .exe would get the default icon.")
         return 1
 
-    # Remove stale build output so the result is a clean, full rebuild.
+    # Remove stale output so the result is a clean, full rebuild.
     for stale in ("build", "dist", "installer"):
         if not clean(os.path.join(HERE, stale)):
             return 1
