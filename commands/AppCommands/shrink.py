@@ -27,6 +27,14 @@ PHRASES = ("exit fullscreen", "exit full screen",
 HELP = "shrink <app> -- put an app back to its normal size"
 EXAMPLE = "shrink notepad"
 
+ABOUT = """\
+Shrink puts an app back to its normal size, undoing fullscreen.
+"restore notepad", "smaller" and "exit fullscreen" all mean this.
+It brings back a minimised window too, so it undoes "minimize" as well.
+Every window that app has is restored, so fullscreen and shrink are each
+other's undo rather than one of them leaving windows behind.\
+"""
+
 
 def run(argument):
     argument = argument.strip()

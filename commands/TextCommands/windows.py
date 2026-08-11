@@ -22,6 +22,15 @@ PHRASES = ("what's open", "whats open", "what is open", "what's running",
 
 HELP = "windows      -- list the windows that are open ('what's open')"
 
+ABOUT = """\
+Windows lists what is open on screen right now.
+"what's open", "what's running" and "what do I have open" all reach it.
+It is also the answer to what "it" means: the window commands take "it"
+to mean whatever you last named, and this shows what is around to name.
+The taskbar, the desktop and my own window are left out, since none of
+them is something you opened.\
+"""
+
 # Always-on shell windows that are not something the user opened and would
 # not think of as being "open". Matched on window class, which does not
 # change with the Windows display language the way a title does.

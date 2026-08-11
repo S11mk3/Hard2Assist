@@ -12,6 +12,15 @@ ALIASES = ("speech", "talk", "voice")
 PHRASES = ("start talking", "start speaking")
 HELP = "speak        -- start speaking replies again"
 
+ABOUT = """\
+Speak turns my voice back on after "quiet".
+"start talking" and "start speaking" work too.
+Everything I say is written here either way -- this only decides whether
+it is also read out loud.
+The voice is the one built into Windows, so it works offline and nothing
+you hear ever leaves this PC.\
+"""
+
 
 def run():
     if not speech.available():

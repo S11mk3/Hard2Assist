@@ -12,6 +12,13 @@ PHRASES = ("shut down", "shut yourself down", "close yourself",
            "see you later", "that will be all", "stuff")
 HELP = "stop         -- quit Hard2Assist"
 
+ABOUT = """\
+Stop quits Hard2Assist.
+"quit", "exit", "goodbye", "shut down" and "see you later" all work.
+The microphone is released on the way out, so nothing is left listening.
+To silence me without quitting, say "quiet" instead.\
+"""
+
 name = os.environ.get("USERNAME", "").strip()
 
 def run():

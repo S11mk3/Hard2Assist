@@ -16,6 +16,17 @@ PHRASES = ("type out",)
 HELP = "type <words> -- type what you say into the app in front"
 EXAMPLE = "type hello world"
 
+ABOUT = """\
+Type sends whatever you say next to the window in front.
+Recognition gives me plain lowercase words with no punctuation, so a few
+marks are spoken: say "comma", "period", "question mark" and "new line"
+where you want them. "{prefix} type hello there comma how are you
+question mark" types "Hello there, how are you?".
+If my own window is in front, I switch to the app you last named first,
+so "type" follows "open" the way the two sound when you say them.
+For more than a sentence or two, say "dictate" instead and just talk.\
+"""
+
 
 def run(argument):
     text = spoken.prepare(argument)

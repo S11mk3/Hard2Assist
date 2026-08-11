@@ -13,6 +13,18 @@ ALIASES = ("opun", "oben", "ope")
 HELP = "open <app>   -- launch an app, program or website"
 EXAMPLE = "open notepad"
 
+ABOUT = """\
+Open launches anything I can name: an app, a program from your Start Menu,
+a folder on this PC, or a website.
+I read your Start Menu when I start, so most programs work with no setup
+at all -- "{prefix} open obs studio" finds OBS Studio by itself. Folders
+like documents and downloads work the same way, and so do sites.
+You do not have to say the whole name: "open ccleaner" finds CCleaner 7.
+If I don't know a name, I open a file picker and ask you to point at the
+program once. After that I remember it for good.
+"open it" reopens whatever you last named.\
+"""
+
 
 def run(argument):
     app = session.resolve(argument)

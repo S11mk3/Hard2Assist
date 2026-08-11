@@ -9,6 +9,15 @@ TAKES_ARG = False
 ALIASES = ("stats", "statue", "system", "performance")
 HELP = "status       -- how busy the CPU and memory are"
 
+ABOUT = """\
+Status says how busy the processor and the memory are, as percentages.
+"how busy are you" and "performance" reach it too.
+How many gigabytes are actually in use, and how many cores this PC has,
+are written here underneath.
+The processor figure is measured over a moment rather than read off
+instantly, so it takes about half a second to answer.\
+"""
+
 
 def run():
     # Sample over a short interval; without one, cpu_percent() returns the

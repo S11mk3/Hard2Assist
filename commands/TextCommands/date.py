@@ -9,6 +9,11 @@ TAKES_ARG = False
 ALIASES = ("day", "today", "dates")
 HELP = "date         -- what day it is"
 
+ABOUT = """\
+Date says the day of the week and the date out loud.
+"what day is it" and "today" both reach it.\
+"""
+
 
 def run():
     now = datetime.now()
