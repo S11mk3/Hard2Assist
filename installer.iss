@@ -15,9 +15,9 @@
 ; folder and to %APPDATA%.
 
 #define AppName "Hard2Assist"
-#define AppPublisher "Hard2Recall"
+#define AppPublisher "Andrija Simic"
 #define AppExe "Hard2Assist.exe"
-#define AppUrl "https://github.com/Hard2Recall/Hard2Assist"
+#define AppUrl "https://github.com/S11mk3/Hard2Assist"
 
 ; Both are supplied by build.py; the fallbacks let the script be compiled by
 ; hand from the Inno Setup IDE.
