@@ -24,7 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 ICON = "H2A.ico"
 NAME = "Hard2Assist"
-PUBLISHER = "Hard2Recall"
+PUBLISHER = "Andrija Simic"
 
 # Single source of truth for the version: it is written into the .exe's
 # resource block below and handed to the installer script, so a release only

@@ -112,6 +112,7 @@ you want:
 | `computer volume 50` | sets it to exactly 50%. "fifty" works too |
 | `computer volume up` | louder. `down` and `mute` too |
 | `computer search how to cook rice` | opens the results in your browser |
+| `computer introduce` | 🔊 *"I'm Hard2Assist, a voice assistant for Windows, made by Andrija Simic…"*. `who are you` works too |
 | `computer help` | lists everything it knows |
 | `computer customize` | change the wake word and how it listens |
 | `computer stop` | quits |
@@ -167,7 +168,7 @@ A few things worth knowing while you use it:
   as you say it, with no wake word needed, until you say `computer stop dictating`.
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 23 commands and 131 apps, they're on screen"*
+  instead, so `computer help` says *"I know 24 commands and 131 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -279,7 +280,7 @@ build.py            builds the app folder, and the installer
 installer.iss       the installer, for Inno Setup
 
 commands/
-  TextCommands/     answers      help time date battery status disk windows
+  TextCommands/     answers      help introduce time date battery status disk windows
   AppCommands/      acting       open focus minimize fullscreen shrink close kill
   Typing/           the keyboard type press dictate
   Controls/         the PC       volume quiet speak stop customize
