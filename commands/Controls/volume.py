@@ -92,7 +92,12 @@ def run(argument):
 
     if what.startswith(("mute", "unmute", "silence")):
         win.tap_key(win.VK_VOLUME_MUTE)
-        say("Muted")
+        # The key is a toggle, so read the result back rather than guess.
+        muted = audio.is_muted()
+        if muted is None:
+            say("Toggled mute")
+        else:
+            say("Muted" if muted else "Sound back on")
         return
 
     # Exact level: "volume 50", "volume fifty", "volume fifty percent",

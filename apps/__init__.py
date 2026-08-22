@@ -15,7 +15,7 @@ correcting a bad match takes priority.
 
 import difflib
 
-from . import folders, installed, system, websites
+from . import folders, installed, itself, system, websites
 
 _catalogue = None
 
@@ -25,7 +25,10 @@ def all_apps():
     global _catalogue
     if _catalogue is None:
         _catalogue = (
-            list(system.APPS)
+            # The app itself comes first, so "focus yourself" can never be
+            # shadowed by a Start Menu shortcut of the same name.
+            [itself.ITSELF]
+            + list(system.APPS)
             + installed.mine()
 
             # After the user's own picks, so "open music" pointed at Spotify
@@ -132,6 +135,14 @@ def remember(name, path):
     app = installed.remember(name, path)
     refresh()
     return app
+
+
+def forget(name):
+    """Drop a remembered app or website. True if there was one to drop."""
+    dropped = installed.forget(name)
+    if dropped:
+        refresh()
+    return dropped
 
 
 def counts():

@@ -1,6 +1,7 @@
 """Bring an app that is already open to the front."""
 
 import session
+import settings
 import win
 from output import detail, say
 
@@ -32,8 +33,8 @@ def run(argument):
 
     handles = win.windows_of(app)
     if not handles:
-        say(f"{app.name} isn't open. Say 'computer open {app.name}' "
-            f"if you want me to open it.")
+        say(f"{app.name} isn't open. Say '{settings.get('prefix')} open "
+            f"{app.name}' if you want me to open it.")
         return
 
     # windows_of() returns handles in Z-order, front first, so the first is

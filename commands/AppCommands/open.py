@@ -5,6 +5,8 @@ import os
 import apps
 import ask
 import session
+import settings
+import win
 from output import detail, say
 
 NAME = "open"
@@ -42,6 +44,16 @@ def run(argument):
 
         session.remember(app)
 
+    # "open yourself" must not start a second copy -- two microphones would
+    # fight over every command -- so the running window comes forward instead.
+    if app.kind == "itself":
+        handles = win.windows_of(app)
+        if handles and win.focus_window(handles[0]):
+            say("I'm right here.")
+        else:
+            say("I'm already running.")
+        return
+
     # os.startfile() goes through the Windows shell, so one code path covers
     # everything: plain exes, .msc consoles, ms-settings: URIs, Start Menu
     # .lnk shortcuts and https:// addresses alike.
@@ -61,7 +73,8 @@ def _ask_where_it_is(wanted):
 
     path = ask.for_program(wanted)
     if not path:
-        detail("Never mind. Say 'computer help' to see what I do know.")
+        detail(f"Never mind. Say '{settings.get('prefix')} help' to see "
+               "what I do know.")
         return None
 
     if not os.path.isfile(path):

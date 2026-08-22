@@ -13,10 +13,10 @@ TEXT = "#fcfdfc"        # normal log text
 DIM = "#6b7683"         # grey: hints and secondary lines
 WARN = "#f59e0b"        # amber: something did not work
 
-TITLE_FONT = ("Segoe UI", 10, "bold")
-STATE_FONT = ("Segoe UI Semibold", 19)
-HINT_FONT = ("Segoe UI", 10)
-LOG_FONT = ("Consolas", 10)
+TITLE_FONT = ("Segoe UI", 11, "bold")
+STATE_FONT = ("Segoe UI Semibold", 22)
+HINT_FONT = ("Segoe UI", 12)
+LOG_FONT = ("Consolas", 13)
 
 
 def blend(colour_a, colour_b, amount):

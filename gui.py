@@ -26,7 +26,7 @@ import theme
 import win
 import wizard
 
-WINDOW_SIZE = "800x600"
+WINDOW_SIZE = "860x640"
 HINT_CLEAR_MS = 4000
 ICON = "H2A.ico"
 
@@ -39,7 +39,10 @@ PULSE_PERIOD = 3.4
 # far more work than the eye can see across these two narrow ranges.
 PULSE_STEPS = 40
 
-DEFAULT_HINT = 'say "computer help" to hear what I can do'
+def default_hint():
+    """The resting hint line, built with the live wake word so it stays right
+    after `customize` changes it."""
+    return f'say "{settings.get("prefix")} help" to hear what I can do'
 
 # The listener reports its state in full sentences, which suit the console.
 # The window's state label wants one short word instead.
@@ -155,10 +158,10 @@ class App:
             bg=theme.BG, fg=theme.TEXT,
         ).pack(pady=(10, 0))
 
-        self.hint = tk.StringVar(value=DEFAULT_HINT)
+        self.hint = tk.StringVar(value=default_hint())
         tk.Label(
             self.root, textvariable=self.hint, font=theme.HINT_FONT,
-            bg=theme.BG, fg=theme.DIM, wraplength=440,
+            bg=theme.BG, fg=theme.DIM, wraplength=560,
         ).pack(pady=(4, 14))
 
         tk.Frame(self.root, bg=theme.LINE, height=1).pack(fill="x", padx=22)
@@ -297,8 +300,10 @@ class App:
             if text.startswith(">"):
                 tag = "command"
             elif text.startswith(("Could not", "I could not", "I don't know",
-                                  "Not allowed", "Windows won't", "I won't",
-                                  "I can't reach", "The microphone stopped")):
+                                  "Not allowed", "Windows won't",
+                                  "Windows would not", "Windows wouldn't",
+                                  "I won't", "I can't reach",
+                                  "The microphone stopped")):
                 tag = "warn"
             else:
                 tag = "normal"
@@ -323,7 +328,7 @@ class App:
     def _restore_hint(self):
         """Put the default hint back after a transient message."""
         self._hint_job = None
-        self.hint.set(DEFAULT_HINT)
+        self.hint.set(default_hint())
 
     def _watch_speech(self):
         """Report it in the log if the voice stops working, then reschedule.
@@ -339,8 +344,8 @@ class App:
         if speech.available() and not speech.enabled():
             if not self._said_muted:
                 self._said_muted = True
-                self.log("Speaking is off. Say 'computer speak' to turn it "
-                         "back on.", tag="dim")
+                self.log(f"Speaking is off. Say '{settings.get('prefix')} "
+                         "speak' to turn it back on.", tag="dim")
         else:
             self._said_muted = False
 

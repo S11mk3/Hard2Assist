@@ -3,6 +3,7 @@
 import psutil
 
 import session
+import settings
 import win
 from output import detail, say
 
@@ -39,9 +40,16 @@ def run(argument):
         return
 
     if app.protected:
+        if app.kind == "itself":
+            say("I won't kill myself.")
+            detail(f"Say '{settings.get('prefix')} stop' to shut me down "
+                   "properly.")
+            return
+
         say(f"I won't kill {app.name}")
-        detail(f"It is the Windows shell, and killing it would take the taskbar "
-               f"and desktop with it. Try 'computer close {app.name}' instead.")
+        detail(f"It is the Windows shell, and killing it would take the "
+               f"taskbar and desktop with it. Try "
+               f"'{settings.get('prefix')} close {app.name}' instead.")
         return
 
     if every:

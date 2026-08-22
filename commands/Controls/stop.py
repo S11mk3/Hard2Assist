@@ -2,7 +2,7 @@
 
 import registry
 import speech
-import os
+import win
 from output import say
 
 NAME = "stop"
@@ -19,10 +19,11 @@ The microphone is released on the way out, so nothing is left listening.
 To silence me without quitting, say "quiet" instead.\
 """
 
-name = os.environ.get("USERNAME", "").strip()
-
 def run():
-    say(f"Goodbye {name}")
+    # Validated the same way the launch greeting is, so an account called
+    # "marko-kg102" hears a plain goodbye rather than its login string.
+    name = win.friendly_username()
+    say(f"Goodbye {name}" if name else "Goodbye")
 
     # say() only queues, and the speech thread is a daemon, so returning
     # straight away would tear the interpreter down before SAPI played a word.

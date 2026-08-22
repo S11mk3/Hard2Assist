@@ -8,6 +8,10 @@ from output import detail, say
 NAME = "search"
 TAKES_ARG = True
 ALIASES = ("google", "surge")
+
+# The argument is the query: "search the meaning of life" must keep its
+# "the". The leading "for" is still dropped below.
+VERBATIM = True
 HELP = "search <words> -- search the web"
 EXAMPLE = "search how to cook rice"
 

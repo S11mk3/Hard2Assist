@@ -27,7 +27,14 @@ def run_console():
 
     def on_command(command):
         detail(f"> {command}")
-        if registry.dispatch(commands, command) is registry.STOP:
+        # Guarded the same way the GUI guards it: one raising command must
+        # not take the whole microphone loop down with it.
+        try:
+            result = registry.dispatch(commands, command)
+        except Exception as e:
+            detail(f"Could not run that: {e}")
+            return
+        if result is registry.STOP:
             ears.stop()
 
     def on_status(text, transient=False):

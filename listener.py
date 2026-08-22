@@ -5,8 +5,6 @@ the main thread. Both receive recognised commands through the same callbacks,
 so listening behaves identically either way.
 """
 
-import os
-import re
 import threading
 import time
 
@@ -14,6 +12,7 @@ import speech_recognition as sr
 
 import settings
 import speech
+import win
 from output import detail, say
 
 # A short listen timeout keeps the loop cycling, so a pause or stop request is
@@ -74,13 +73,12 @@ def strip_prefix(text, prefix):
 def _greeting():
     """The hello spoken at launch.
 
-    Uses the Windows account name when it reads like a name. Accounts are
-    also called things like "marko-kg102", and being greeted by a login is
-    worse than not being greeted by name.
+    Uses the Windows account name when it reads like a name; see
+    win.friendly_username(), which `stop`'s goodbye shares.
     """
-    name = os.environ.get("USERNAME", "").strip()
+    name = win.friendly_username()
 
-    if not re.fullmatch(r"[A-Za-z]{2,20}", name):
+    if not name:
         return "Hello, what can I help with?"
 
     return f"Hello {name}, what can I help with?"

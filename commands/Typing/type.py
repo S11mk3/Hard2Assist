@@ -7,6 +7,10 @@ from output import detail, say
 NAME = "type"
 TAKES_ARG = True
 
+# The argument is the text: "type the quick brown fox" must keep its "the",
+# so the registry's filler-stripping is turned off.
+VERBATIM = True
+
 # "write" is a plain synonym; the rest are the recogniser's usual guesses at
 # the word said mid-sentence.
 ALIASES = ("types", "typed", "write", "writes")

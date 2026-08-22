@@ -16,6 +16,11 @@ A command module is any .py file under commands/<group>/ that defines:
     ALIASES   -- optional; single words the recogniser commonly returns
                  instead. Single words only: they are matched a word at a
                  time, so a multi-word alias could never match.
+    VERBATIM  -- optional; with TAKES_ARG, the argument is handed over
+                 exactly as spoken. For commands that treat the words as
+                 text rather than meaning (`type`, `search`), where
+                 stripping "the" from "type the quick brown fox" would
+                 change what gets typed.
     PHRASES   -- optional; whole spoken sentences that name no command word
                  at all, such as "what can you do" for `help`.
     EXAMPLE   -- optional; a sample argument, spoken back when the user needs
@@ -34,6 +39,7 @@ import importlib.util
 import os
 import sys
 
+import apps
 import settings
 from output import detail, say
 
@@ -199,10 +205,15 @@ def _phrase(words):
     return None, None, None
 
 
-def _argument(words):
-    """The words after a command word, as the argument the command expects."""
-    while words and words[0] in ARG_FILLER:
-        words = words[1:]
+def _argument(words, verbatim=False):
+    """The words after a command word, as the argument the command expects.
+
+    A VERBATIM command keeps every word: filler is only glue when the
+    argument names a thing, not when the argument *is* the text.
+    """
+    if not verbatim:
+        while words and words[0] in ARG_FILLER:
+            words = words[1:]
 
     return " ".join(words).strip()
 
@@ -267,16 +278,19 @@ def understand(commands, utterance):
     #    `quiet` and "close yourself" meaning `stop`.
     if phrase_name is not None and not (exact and index < start):
         # Nothing to report as corrected: the phrase matched word for word.
-        return phrase_name, _argument(words[after:]), None
+        verbatim = getattr(commands[phrase_name], "VERBATIM", False)
+        return phrase_name, _argument(words[after:], verbatim), None
 
     # 2: a command word somewhere in the sentence.
     if name is not None:
+        verbatim = getattr(commands[name], "VERBATIM", False)
         corrected = words[index] if words[index] != name else None
-        argument = _argument(words[index + 1:])
+        argument = _argument(words[index + 1:], verbatim)
 
         # Only when nothing followed the command word, so "volume up" and
-        # "turn the volume up" both take their argument from the right.
-        if not argument:
+        # "turn the volume up" both take their argument from the right. A
+        # verbatim command never takes its text from in front of itself.
+        if not argument and not verbatim:
             argument = _before(words[:index])
 
         return name, argument, corrected
@@ -285,7 +299,8 @@ def understand(commands, utterance):
     close = difflib.get_close_matches(words[0], list(commands), n=1,
                                       cutoff=MATCH_CUTOFF)
     if close:
-        return close[0], _argument(words[1:]), words[0]
+        verbatim = getattr(commands[close[0]], "VERBATIM", False)
+        return close[0], _argument(words[1:], verbatim), words[0]
 
     return None, None, None
 
@@ -338,14 +353,24 @@ def _report_unknown(commands, utterance):
             f"Say {usage(module)}.")
         return
 
+    # No command is close, but the utterance may name an app on its own --
+    # "computer settings" or "computer notepad" -- said without a verb.
+    app = apps.find(utterance)
+    if app is not None:
+        say(f"I don't know '{utterance}'. If you meant the app, say "
+            f"{settings.get('prefix')} open {app.name}.")
+        return
+
     # Nothing close. Examples are built from the loaded commands, so they
     # cannot drift out of step with what is available.
     examples = [usage(commands[name]) for name in ("open", "time")
                 if name in commands]
 
     if examples:
-        say(f"I don't know '{utterance}'. You can say things like ")
-        detail(f"{', or '.join(examples)}.")
+        say(f"I don't know '{utterance}'. You can say things like "
+            f"{examples[0]}.")
+        if len(examples) > 1:
+            detail(f"Or: {', or '.join(examples[1:])}.")
         return
 
     say(f"I don't know '{utterance}'.")

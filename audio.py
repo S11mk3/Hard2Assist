@@ -34,6 +34,18 @@ def _endpoint():
 
 
 
+def is_muted():
+    """Whether the speakers are muted right now, or None if unreadable."""
+    endpoint = _endpoint()
+    if endpoint is None:
+        return None
+
+    try:
+        return bool(endpoint.GetMute())
+    except Exception:
+        return None
+
+
 def set_level(percent):
     """Set the volume. Returns the resulting level, or None on failure."""
     endpoint = _endpoint()
