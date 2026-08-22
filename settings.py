@@ -79,10 +79,25 @@ def set(key, value):
 
 
 def save():
-    """Write the settings file, creating the folder if needed."""
-    os.makedirs(USER_DIR, exist_ok=True)
-    with open(FILE, "w", encoding="utf-8") as f:
-        json.dump(load(), f, indent=2)
+    """Write the settings file, creating the folder if needed.
+
+    A failed write is reported rather than raised: it used to escape all the
+    way out of the microphone loop, which then announced "the microphone
+    stopped working" and went deaf over a full disk. True when it stuck.
+    """
+    try:
+        os.makedirs(USER_DIR, exist_ok=True)
+        with open(FILE, "w", encoding="utf-8") as f:
+            json.dump(load(), f, indent=2)
+        return True
+    except OSError as e:
+        # Imported here rather than at the top: output's chain of imports
+        # must stay free to import settings.
+        from output import detail, say
+        say("I could not save your settings, so they will only last until "
+            "I'm closed.")
+        detail(f"({e})")
+        return False
 
 
 def is_first_run():

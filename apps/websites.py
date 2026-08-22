@@ -8,9 +8,16 @@ everything else. Add a line here and it works.
 from .app import App
 
 
-def site(name, url, *aliases):
-    """One website, as an App."""
-    return App(name, url, aliases=tuple(aliases), kind="web")
+def site(name, url, *aliases, title=None):
+    """One website, as an App.
+
+    The title is what lets `focus` and `close` find the tab once it is open:
+    browsers put the page title in the window title, so "youtube" is inside
+    "YouTube - Google Chrome". Pass title= when the page names itself
+    differently from what the user says.
+    """
+    return App(name, url, title=title or name, aliases=tuple(aliases),
+               kind="web")
 
 
 SITES = [
@@ -25,5 +32,5 @@ SITES = [
     site("chatgpt", "https://chat.openai.com", "chat gpt"),
     site("claude", "https://claude.ai"),
     site("twitch", "https://www.twitch.tv"),
-    site("spotify web", "https://open.spotify.com"),
+    site("spotify web", "https://open.spotify.com", title="spotify"),
 ]

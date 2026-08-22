@@ -93,14 +93,21 @@ def _load_user_file():
 
 
 def _user_app(name, path):
-    """Build the App for a user-picked program.
+    """Build the App for a user-picked program or a remembered website.
 
-    These are the reliable entries: the executable is known, so close and kill
-    can match the process by name instead of guessing from a window title.
+    Programs are the reliable entries: the executable is known, so close and
+    kill can match the process by name instead of guessing from a window
+    title. A URL (from `remember website`) becomes a web App like the ones
+    in websites.py, titled by name so `focus` can find the open tab.
     """
+    name = name.lower().strip()
+
+    if path.lower().startswith(("http://", "https://")):
+        return App(name=name, launch=path, title=name, kind="web")
+
     process = os.path.basename(path)
     return App(
-        name=name.lower().strip(),
+        name=name,
         launch=path,
         title=os.path.splitext(process)[0],
         process=process if process.lower().endswith(".exe") else "",
@@ -115,14 +122,40 @@ def mine():
             if isinstance(path, str)]
 
 
+def _save_user_file(entries):
+    """Write the entries back. False when the folder is unwritable."""
+    try:
+        os.makedirs(USER_DIR, exist_ok=True)
+        with open(USER_FILE, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2)
+        return True
+    except OSError as e:
+        # Imported late so this module stays importable before output is.
+        from output import detail
+        detail(f"(Could not write {os.path.basename(USER_FILE)}: {e})")
+        return False
+
+
 def remember(name, path):
     """Save a picked app to the JSON file, so the user is only asked once."""
     name = name.lower().strip()
     entries = _load_user_file()
     entries[name] = path
 
-    os.makedirs(USER_DIR, exist_ok=True)
-    with open(USER_FILE, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2)
+    if not _save_user_file(entries):
+        from output import detail
+        detail(f"(I'll remember {name} until I'm closed, but not after.)")
 
     return _user_app(name, path)
+
+
+def forget(name):
+    """Drop a remembered entry. True if there was one to drop."""
+    name = name.lower().strip()
+    entries = _load_user_file()
+
+    if name not in entries:
+        return False
+
+    del entries[name]
+    return _save_user_file(entries)

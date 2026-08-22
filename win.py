@@ -8,6 +8,7 @@ one can end up pointing at an unrelated window.
 
 import ctypes
 import os
+import re
 from ctypes import wintypes
 
 import psutil
@@ -136,6 +137,13 @@ def windows_of(app):
     nothing falls back to checking ownership by process name. That costs a
     process lookup per window, which is why it is the fallback.
     """
+    if app.kind == "itself":
+        # Our own windows, found by process id rather than title: a browser
+        # tab or a folder named "Hard2Assist" must not be mistaken for us.
+        ours = os.getpid()
+        return [hwnd for hwnd, _title, _class_name in visible_windows()
+                if pid_of_window(hwnd) == ours]
+
     if not app.window_class and not app.title:
         return []
 
@@ -288,6 +296,11 @@ def restore_window(hwnd):
 VK_VOLUME_MUTE = 0xAD
 VK_VOLUME_DOWN = 0xAE
 VK_VOLUME_UP = 0xAF
+
+# For `screenshot`: Win+PrintScreen is the chord Windows itself saves a PNG
+# to Pictures\Screenshots for, so sending it needs no capture code at all.
+VK_LWIN = 0x5B
+VK_SNAPSHOT = 0x2C
 
 KEYEVENTF_KEYUP = 0x0002
 
@@ -448,6 +461,59 @@ def process_of_window(hwnd):
         return psutil.Process(pid_of_window(hwnd)).name()
     except (psutil.NoSuchProcess, psutil.AccessDenied, ValueError):
         return ""
+
+
+def friendly_username():
+    """The Windows account name when it reads like a real name, else "".
+
+    Accounts are also called things like "marko-kg102", and being addressed
+    by a login string is worse than not being addressed by name. Shared by
+    the launch greeting and `stop`'s goodbye, so the two always agree.
+    """
+    name = os.environ.get("USERNAME", "").strip()
+    if re.fullmatch(r"[A-Za-z]{2,20}", name):
+        return name
+    return ""
+
+
+# -- clipboard ---------------------------------------------------------------
+
+CF_UNICODETEXT = 13
+
+user32.OpenClipboard.argtypes = [wintypes.HWND]
+user32.OpenClipboard.restype = wintypes.BOOL
+user32.CloseClipboard.argtypes = []
+user32.CloseClipboard.restype = wintypes.BOOL
+user32.GetClipboardData.argtypes = [wintypes.UINT]
+user32.GetClipboardData.restype = wintypes.HANDLE
+kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalLock.restype = wintypes.LPVOID
+kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalUnlock.restype = wintypes.BOOL
+
+
+def clipboard_text():
+    """The text on the clipboard, or "".
+
+    What `remember website` reads: a URL cannot sensibly be dictated, but it
+    can be copied from the browser's address bar first.
+    """
+    if not user32.OpenClipboard(None):
+        return ""
+    try:
+        handle = user32.GetClipboardData(CF_UNICODETEXT)
+        if not handle:
+            return ""
+
+        pointer = kernel32.GlobalLock(handle)
+        if not pointer:
+            return ""
+        try:
+            return ctypes.wstring_at(pointer)
+        finally:
+            kernel32.GlobalUnlock(handle)
+    finally:
+        user32.CloseClipboard()
 
 
 def foreground_is_ours():

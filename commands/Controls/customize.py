@@ -4,7 +4,10 @@ import wizard
 
 NAME = "customize"
 TAKES_ARG = False
-ALIASES = ("customise", "settings", "setup", "preferences", "configure")
+# "settings" is deliberately absent: Windows Settings is an app in the
+# catalogue, and claiming the word here made "computer settings" open this
+# conversation instead of anything useful.
+ALIASES = ("customise", "setup", "preferences", "configure")
 HELP = "customize    -- change the wake word and how I listen"
 
 ABOUT = """\
@@ -15,7 +18,7 @@ open notepad". Second, whether I listen all the time, or only while my
 window is in focus.
 Each answer is explained, read back, and confirmed before it is saved.
 Say "keep" to leave one as it is.
-"settings" and "setup" reach this too. Your answers are saved and used
+"setup" and "preferences" reach this too. Your answers are saved and used
 from then on.\
 """
 
