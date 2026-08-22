@@ -111,7 +111,11 @@ you want:
 | `computer disk` | 🔊 *"C has 58 gigabytes free"* |
 | `computer volume 50` | sets it to exactly 50%. "fifty" works too |
 | `computer volume up` | louder. `down` and `mute` too |
+| `computer screenshot` | saves a picture of the screen to Pictures, under Screenshots |
 | `computer search how to cook rice` | opens the results in your browser |
+| `computer remember music player` | opens a file picker once — then `open music player` just works |
+| `computer remember website music` | saves the address you copied in the browser, under that name |
+| `computer forget music` | removes a program or website you taught it |
 | `computer introduce` | 🔊 *"I'm Hard2Assist, a voice assistant for Windows, made by Andrija Simic…"*. `who are you` works too |
 | `computer help` | lists every command on screen |
 | `computer help apps` | lists everything it can open — programs, folders, websites |
@@ -170,7 +174,7 @@ A few things worth knowing while you use it:
   as you say it, with no wake word needed, until you say `computer stop dictating`.
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
-  instead, so `computer help` says *"I know 24 commands and 131 apps, they're on screen"*
+  instead, so `computer help` says *"I know 27 commands and 131 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
@@ -187,6 +191,11 @@ A few things worth knowing while you use it:
   program it has not found and a file picker opens. Click the program once and it is
   remembered forever, in `%APPDATA%\Hard2Assist\my-apps.json`. (You cannot dictate
   `C:\Program Files\...` out loud, so it does not ask you to.)
+
+  You can also teach it up front: `computer remember music player` opens the same
+  picker without waiting for a failed `open`, and `computer remember website music`
+  saves whatever address you last copied in the browser. `computer forget music`
+  takes either back out.
 
 - **It expects to be misheard.** Speech recognition hears **"clothes"** when you say
   **"close"**, nearly every time. Commands carry a list of what they actually get
@@ -295,9 +304,9 @@ installer.iss       the installer, for Inno Setup
 
 commands/
   TextCommands/     answers      help introduce time date battery status disk windows
-  AppCommands/      acting       open focus minimize fullscreen shrink close kill
+  AppCommands/      acting       open focus minimize fullscreen shrink close kill remember forget
   Typing/           the keyboard type press dictate
-  Controls/         the PC       volume quiet speak stop customize
+  Controls/         the PC       volume quiet speak stop customize screenshot
   Web/              online       search
 
 apps/
@@ -306,6 +315,7 @@ apps/
   folders.py        Documents, Downloads and the rest, wherever Windows put them
   installed.py      found in your Start Menu, plus ones you picked
   websites.py       sites
+  itself.py         the app itself, so "focus yourself" has something to find
 ```
 
 ---
