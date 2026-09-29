@@ -7,6 +7,10 @@ from output import say
 NAME = "battery"
 TAKES_ARG = False
 ALIASES = ("batery", "batteries")
+
+# "how much battery is left" needs no entry: "battery" is the command word.
+PHRASES = ("how much charge",)
+
 HELP = "battery      -- how much charge is left"
 
 ABOUT = """\

@@ -9,7 +9,7 @@ NAME = "stop"
 TAKES_ARG = False
 ALIASES = ("stopp", "quit", "exit", "goodbye")
 PHRASES = ("shut down", "shut yourself down", "close yourself",
-           "see you later", "that will be all", "stuff")
+           "see you later", "that will be all")
 HELP = "stop         -- quit Hard2Assist"
 
 ABOUT = """\
@@ -18,6 +18,7 @@ Stop quits Hard2Assist.
 The microphone is released on the way out, so nothing is left listening.
 To silence me without quitting, say "quiet" instead.\
 """
+
 
 def run():
     # Validated the same way the launch greeting is, so an account called

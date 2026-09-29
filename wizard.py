@@ -11,6 +11,7 @@ Questions are asked without the wake word, since one of the things being
 chosen is the wake word.
 """
 
+import listener
 import settings
 import speech
 from output import detail, say
@@ -182,28 +183,20 @@ def _ask_listening(ears):
 
 QUESTIONS = (_ask_prefix, _ask_listening)
 
-# The Listener to ask through. Registered at startup, as output.py and ask.py
-# take their handlers, so the `customize` command can start a conversation
-# without the command contract having to carry a Listener.
-_ears = None
 
-
-def use(ears):
-    """Register the Listener the conversation listens through."""
-    global _ears
-    _ears = ears
-
-
-def on_ready(ears):
-    """The Listener's on_ready hook: remember it, and set up on first run."""
-    use(ears)
+def on_ready(_ears):
+    """The Listener's on_ready hook: set up on first run."""
     if settings.is_first_run():
         run(first_time=True)
 
 
 def run(first_time=False):
-    """Walk the user through the settings."""
-    ears = _ears
+    """Walk the user through the settings.
+
+    Listens through listener.current(), so the `customize` command can start
+    a conversation without the command contract having to carry a Listener.
+    """
+    ears = listener.current()
     if ears is None:
         detail("Setup needs the microphone, which is not running.")
         return

@@ -2,7 +2,6 @@
 
 import session
 import win
-from output import detail, say
 
 NAME = "shrink"
 TAKES_ARG = True
@@ -33,37 +32,6 @@ other's undo rather than one of them leaving windows behind.\
 
 
 def run(argument):
-    argument = argument.strip()
-
-    # `close` and `kill` take "all <app>", so the phrasing turns up here too.
-    if argument.lower().startswith("all "):
-        argument = argument[4:].strip()
-
-    app = session.resolve(argument)
-    if app is None:
-        session.unknown(argument)
-        return
-
-    handles = win.windows_of(app)
-    if not handles:
-        say(f"{app.name} isn't open.")
-        return
-
     # Every window, as `fullscreen` does, so the two are each other's undo
     # rather than one of them leaving windows behind.
-    restored = 0
-    refused = 0
-    for hwnd in handles:
-        if win.restore_window(hwnd):
-            restored += 1
-        else:
-            refused += 1
-
-    if restored:
-        window = "window" if restored == 1 else "windows"
-        say(f"Restored {restored} {app.name} {window}")
-
-    if refused:
-        say(f"Windows won't let me resize {app.name}")
-        detail("It runs as administrator and Hard2Assist does not. Restart "
-               "Hard2Assist as administrator to control it.")
+    session.each_window(argument, win.restore_window, "Restored", "resize")

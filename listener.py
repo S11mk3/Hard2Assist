@@ -5,6 +5,7 @@ the main thread. Both receive recognised commands through the same callbacks,
 so listening behaves identically either way.
 """
 
+import re
 import threading
 import time
 
@@ -46,9 +47,10 @@ _current = None
 def current():
     """The Listener that owns the microphone, or None if it is not open.
 
-    For commands that need to hear an answer of their own: `dictate` keeps
-    listening until it is told to stop. The setup conversation reaches its
-    Listener through wizard.use() instead, which is registered at startup.
+    For code that needs to hear an answer of its own: `dictate` keeps
+    listening until it is told to stop, and the setup conversation asks its
+    questions through it. Set before on_ready runs, so first-run setup finds
+    it too.
 
     Only ever one at a time, so a module global is the honest shape.
     """
@@ -61,13 +63,18 @@ def strip_prefix(text, prefix):
     Spoken input must start with the wake word, so that ordinary conversation
     ("I bought a computer yesterday") does not trigger commands. Returns the
     command text, or None when the wake word is absent.
+
+    The wake word must be a whole word: "computers open notepad" is not a
+    command, and with a short wake word like "max", "maximize notepad" would
+    otherwise fire as "imize notepad".
     """
-    spoken = text.lower().strip()
+    match = re.match(rf"{re.escape(prefix.lower())}(?:$|[\s,.!?]+)(.*)",
+                     text.lower().strip())
 
-    if spoken.startswith(prefix):
-        return spoken[len(prefix):].strip(" ,.")
+    if match is None:
+        return None
 
-    return None
+    return match.group(1).strip(" ,.")
 
 
 def _greeting():

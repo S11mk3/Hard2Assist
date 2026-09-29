@@ -39,10 +39,12 @@ PULSE_PERIOD = 3.4
 # far more work than the eye can see across these two narrow ranges.
 PULSE_STEPS = 40
 
+
 def default_hint():
     """The resting hint line, built with the live wake word so it stays right
     after `customize` changes it."""
     return f'say "{settings.get("prefix")} help" to hear what I can do'
+
 
 # The listener reports its state in full sentences, which suit the console.
 # The window's state label wants one short word instead.
@@ -63,9 +65,6 @@ class App:
     def __init__(self, root):
         self.root = root
         self.messages = queue.Queue()
-
-        # Commands run one at a time, whichever thread asked for one.
-        self.command_lock = threading.Lock()
         self._hint_job = None
 
         # When the current spell of listening began, or None while at rest.
@@ -364,14 +363,17 @@ class App:
         return win.foreground_is_ours()
 
     def run_command(self, command):
-        """Run one command. Called from the microphone thread."""
-        with self.command_lock:
-            self.log_from_any_thread(f"> {command}")
-            try:
-                result = registry.dispatch(self.commands, command)
-            except Exception as e:
-                self.log_from_any_thread(f"Could not run that: {e}")
-                return
+        """Run one command. Called from the microphone thread.
+
+        That thread is the only caller, and it waits for each command to
+        finish before listening again, so commands never overlap.
+        """
+        self.log_from_any_thread(f"> {command}")
+        try:
+            result = registry.dispatch(self.commands, command)
+        except Exception as e:
+            self.log_from_any_thread(f"Could not run that: {e}")
+            return
 
         if result is registry.STOP:
             self.root.after(0, self.quit)

@@ -65,10 +65,8 @@ SUGGESTED = ("enter", "tab", "escape", "delete", "save", "copy", "paste",
 def run(argument):
     key = argument.lower().strip().strip(" ,.")
 
-    # "press the enter key" is how people say it out loud.
-    for filler in ("the ", "a "):
-        if key.startswith(filler):
-            key = key[len(filler):]
+    # "press the enter key" is how people say it out loud. The registry has
+    # already dropped the "the"; the trailing "key" is left to here.
     for filler in (" key", " button"):
         if key.endswith(filler):
             key = key[:-len(filler)]
@@ -83,9 +81,7 @@ def run(argument):
         return
 
     if not win.send_keys(*KEYS[key]):
-        say(f"Windows wouldn't let me press that in {target}.")
-        detail("That window runs as administrator and Hard2Assist does not. "
-               "Restart Hard2Assist as administrator to control it.")
+        session.refused(f"press that in {target}.")
         return
 
     say(f"Pressed {key}")

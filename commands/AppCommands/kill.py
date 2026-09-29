@@ -25,14 +25,9 @@ and the desktop with it.\
 
 
 def run(argument):
-    argument = argument.strip()
-
     # "kill all cmd" targets every window; plain "kill cmd" targets only the
     # most recently opened one.
-    every = False
-    if argument.lower().startswith("all "):
-        every = True
-        argument = argument[4:].strip()
+    argument, every = session.split_all(argument)
 
     app = session.resolve(argument)
     if app is None:
@@ -52,12 +47,7 @@ def run(argument):
                f"'{settings.get('prefix')} close {app.name}' instead.")
         return
 
-    if every:
-        handles = win.windows_of(app)
-    else:
-        newest = win.newest_window_of(app)
-        handles = [newest] if newest else []
-
+    handles = session.target_windows(app, every)
     if not handles:
         say(f"{app.name} does not seem to be open.")
         return

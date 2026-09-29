@@ -7,6 +7,10 @@ from output import detail, say
 NAME = "status"
 TAKES_ARG = False
 ALIASES = ("stats", "statue", "system", "performance")
+
+# Names no command word, so only a phrase can reach it.
+PHRASES = ("how busy are you", "how busy is it")
+
 HELP = "status       -- how busy the CPU and memory are"
 
 ABOUT = """\

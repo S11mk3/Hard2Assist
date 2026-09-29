@@ -33,7 +33,6 @@ def _endpoint():
     return _local.endpoint
 
 
-
 def is_muted():
     """Whether the speakers are muted right now, or None if unreadable."""
     endpoint = _endpoint()

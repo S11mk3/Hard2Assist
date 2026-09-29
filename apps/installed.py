@@ -10,10 +10,11 @@ import json
 import os
 import re
 
+import settings
+
 from .app import App
 
-USER_DIR = os.path.join(os.environ.get("APPDATA", ""), "Hard2Assist")
-USER_FILE = os.path.join(USER_DIR, "my-apps.json")
+USER_FILE = os.path.join(settings.USER_DIR, "my-apps.json")
 
 START_MENUS = [
     os.path.join(os.environ.get("PROGRAMDATA", ""),
@@ -83,13 +84,23 @@ def scan():
     return list(found.values())
 
 
-def _load_user_file():
+# The user's {name: path} entries, read from the file once and then kept here.
+# In memory rather than re-read each time, so a remember or forget that could
+# not be saved still holds until the app is closed, as it says it will.
+_entries = None
+
+
+def _user_entries():
     """The saved {name: path} entries, or {} if the file is missing or bad."""
-    try:
-        with open(USER_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    global _entries
+    if _entries is None:
+        try:
+            with open(USER_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+        except (OSError, ValueError):
+            loaded = {}
+        _entries = loaded if isinstance(loaded, dict) else {}
+    return _entries
 
 
 def _user_app(name, path):
@@ -118,16 +129,16 @@ def _user_app(name, path):
 def mine():
     """Apps the user pointed at themselves, loaded from the JSON file."""
     return [_user_app(name, path)
-            for name, path in _load_user_file().items()
+            for name, path in _user_entries().items()
             if isinstance(path, str)]
 
 
-def _save_user_file(entries):
+def _save_user_file():
     """Write the entries back. False when the folder is unwritable."""
     try:
-        os.makedirs(USER_DIR, exist_ok=True)
+        os.makedirs(settings.USER_DIR, exist_ok=True)
         with open(USER_FILE, "w", encoding="utf-8") as f:
-            json.dump(entries, f, indent=2)
+            json.dump(_user_entries(), f, indent=2)
         return True
     except OSError as e:
         # Imported late so this module stays importable before output is.
@@ -139,10 +150,9 @@ def _save_user_file(entries):
 def remember(name, path):
     """Save a picked app to the JSON file, so the user is only asked once."""
     name = name.lower().strip()
-    entries = _load_user_file()
-    entries[name] = path
+    _user_entries()[name] = path
 
-    if not _save_user_file(entries):
+    if not _save_user_file():
         from output import detail
         detail(f"(I'll remember {name} until I'm closed, but not after.)")
 
@@ -150,12 +160,22 @@ def remember(name, path):
 
 
 def forget(name):
-    """Drop a remembered entry. True if there was one to drop."""
+    """Drop a remembered entry. True if there was one to drop.
+
+    True even when the file could not be written: the entry is gone for this
+    session, and the failure has already been reported.
+    """
     name = name.lower().strip()
-    entries = _load_user_file()
+    entries = _user_entries()
 
     if name not in entries:
         return False
 
     del entries[name]
-    return _save_user_file(entries)
+
+    if not _save_user_file():
+        from output import detail
+        detail(f"(I'll forget {name} until I'm closed, but it will be back "
+               "next time.)")
+
+    return True

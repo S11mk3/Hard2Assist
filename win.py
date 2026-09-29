@@ -302,24 +302,15 @@ VK_VOLUME_UP = 0xAF
 VK_LWIN = 0x5B
 VK_SNAPSHOT = 0x2C
 
-KEYEVENTF_KEYUP = 0x0002
 
-
-def tap_key(vk, times=1):
-    """Press and release a virtual key, as though typed on a real keyboard."""
-    for _ in range(times):
-        user32.keybd_event(vk, 0, 0, 0)
-        user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
-
-
-# -- typing ------------------------------------------------------------------
+# -- keys and typing ---------------------------------------------------------
 #
-# send_text() and send_keys() go through SendInput rather than the keybd_event
-# above. keybd_event is enough for the volume keys, which are the same on
-# every keyboard, but not for text: it sends a key *position*, so the letters
-# that come out depend on the user's layout. SendInput can send a character
-# instead (KEYEVENTF_UNICODE), which types the same thing on every layout.
+# Every keystroke goes through SendInput. Besides virtual keys it can send a
+# character (KEYEVENTF_UNICODE), which types the same thing whatever the
+# user's keyboard layout, where a virtual key only names a key and the letter
+# that comes out depends on the layout.
 
+KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_UNICODE = 0x0004
 INPUT_KEYBOARD = 1
 
@@ -440,6 +431,15 @@ def send_keys(*vks):
     """
     events = [_key_event(vk=vk) for vk in vks]
     events += [_key_event(vk=vk, flags=KEYEVENTF_KEYUP) for vk in reversed(vks)]
+
+    return _send(events)
+
+
+def tap_key(vk, times=1):
+    """Press and release one key `times` times. False if Windows refused."""
+    events = []
+    for _ in range(times):
+        events += [_key_event(vk=vk), _key_event(vk=vk, flags=KEYEVENTF_KEYUP)]
 
     return _send(events)
 
