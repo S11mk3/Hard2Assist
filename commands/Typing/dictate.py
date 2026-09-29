@@ -118,7 +118,10 @@ def _stop_pattern():
     gap = r"[\s,.!?]+"
 
     return re.compile(
-        rf"(?:^|{gap}){prefix}"          # the wake word, alone or after a line
+        # The wake word, alone or after a line. The separator before it is
+        # looked at rather than taken, so "home at six. Computer, stop" keeps
+        # its full stop.
+        rf"(?:^|(?<=[\s,.!?])){prefix}"
         rf"(?:{gap}(?:{filler}))*"       # "please", "can you"
         rf"{gap}(?:{phrases})"           # the phrase itself
         rf"(?:{gap}(?:{filler}))*"       # "now", "please"
@@ -136,7 +139,9 @@ def _split_stop(heard):
     """
     heard = heard.strip()
 
-    trimmed = _stop_pattern().sub("", heard).strip()
+    # A comma left dangling where the phrase came off goes too: "six,
+    # computer stop dictating" types "six", not "six,".
+    trimmed = _stop_pattern().sub("", heard).rstrip(" ,").strip()
 
     return (trimmed, True) if trimmed != heard else (heard, False)
 

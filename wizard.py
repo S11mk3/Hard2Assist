@@ -11,6 +11,8 @@ Questions are asked without the wake word, since one of the things being
 chosen is the wake word.
 """
 
+import re
+
 import listener
 import settings
 import speech
@@ -45,11 +47,18 @@ def _speak(text):
 
 
 def _hear(ears):
-    """One spoken answer, lowercased, or None."""
+    """One spoken answer as lowercase words with no punctuation, or None.
+
+    The recogniser punctuates -- "Yes, please." -- and the answer sets below
+    are bare words, so "yes," has to become "yes" to be found in them.
+    """
     heard = ears.listen_once()
     if not heard:
         return None
-    answer = heard.strip().lower().strip(" ,.!?")
+    heard = heard.lower().replace("\u2019", "'")
+    answer = " ".join(re.findall(r"[\w']+", heard))
+    if not answer:
+        return None
     detail(f"  > {answer}")
     return answer
 

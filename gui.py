@@ -302,6 +302,7 @@ class App:
                                   "Not allowed", "Windows won't",
                                   "Windows would not", "Windows wouldn't",
                                   "I won't", "I can't reach",
+                                  "I can't recognise", "I couldn't load",
                                   "The microphone stopped")):
                 tag = "warn"
             else:

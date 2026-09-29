@@ -2,6 +2,8 @@
 
     python build.py               # dist/Hard2Assist/ -- the app folder
     python build.py --installer   # ...and wrap it in Hard2Assist-Setup.exe
+    python build.py --fetch-model # only download the speech model into models/,
+                                  # which running from source needs too
 
 Produces a folder containing the .exe with the Python runtime beside it,
 rather than a single self-extracting .exe. A one-file build unpacks the whole
@@ -23,6 +25,9 @@ import time
 from version import AUTHOR as PUBLISHER
 from version import NAME, VERSION
 
+# The speech model's folder name under models/, shared with the app.
+from recognizer import MODEL
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 ICON = "H2A.ico"
@@ -34,17 +39,25 @@ INSTALLER_SCRIPT = "installer.iss"
 #
 # SpeechRecognition supports a dozen recognisers and PyInstaller cannot tell
 # which one is called, so it packs the dependencies of all of them.
-# Hard2Assist uses sr.Microphone and recognize_google, and both are pure
-# standard library underneath (urllib, wave, audioop, aifc). Nothing on that
-# path imports any of the following:
+# Hard2Assist uses sr.Microphone, Moonshine's Transcriber (recognizer.py) and
+# recognize_google as the fallback. The first and last are pure standard
+# library underneath (urllib, wave, audioop, aifc), and the Transcriber is a
+# native library reached through ctypes. Nothing on that path imports any of
+# the following:
 #
 #   numpy       reached only from recognizers/whisper_local/, and there only
-#               inside `if TYPE_CHECKING:`, yet the largest thing in the bundle
+#               inside `if TYPE_CHECKING:`, and from Moonshine's own
+#               microphone class, which Hard2Assist does not use
 #   requests    with h2/hpack/hyperframe behind it; the Google recogniser uses
 #               urllib.request instead
+#   sounddevice, tqdm, filelock     Moonshine's microphone capture and model
+#               downloader. The app captures audio itself, and the model is
+#               bundled rather than downloaded
 #   pocketsphinx, yaml, PIL     other optional recognisers and their baggage
 #   vosk        the offline recogniser, when installed. Through tqdm.gui it
 #               drags in matplotlib and a Qt binding (PySide6): 110 MB
+#   matplotlib, PySide6, shiboken6, PyQt5, PyQt6    that same baggage, named
+#               outright so no other route can bring it back
 #   setuptools, distutils, pkg_resources    build-time tooling
 #   unittest, pydoc, pytest     development-only
 #
@@ -61,8 +74,16 @@ EXCLUDES = [
     "h2",
     "hpack",
     "hyperframe",
+    "sounddevice",
+    "tqdm",
+    "filelock",
     "pocketsphinx",
     "vosk",
+    "matplotlib",
+    "PySide6",
+    "shiboken6",
+    "PyQt5",
+    "PyQt6",
     "unittest",
     "pydoc",
     "pytest",
@@ -74,11 +95,12 @@ EXCLUDES = [
 #
 #   pocketsphinx-data   the offline CMU Sphinx English models, 38 MB of which
 #                       28 MB is one language model. Only recognize_sphinx()
-#                       reads it, and Hard2Assist uses recognize_google().
+#                       reads it, and Hard2Assist uses Moonshine instead.
 #   flac-linux/flac-mac SpeechRecognition ships a FLAC encoder per platform.
-#                       flac-win32.exe must stay -- every clip is encoded
-#                       through it before upload -- but the Linux and macOS
-#                       executables are weight a Windows app cannot use.
+#                       flac-win32.exe must stay -- the Google fallback
+#                       encodes every clip through it before upload -- but
+#                       the Linux and macOS executables are weight a Windows
+#                       app cannot use.
 UNUSED_PAYLOAD = ("pocketsphinx-data", "flac-linux", "flac-mac")
 
 OPTIONS = [
@@ -114,6 +136,15 @@ OPTIONS = [
     "--hidden-import", "comtypes.client",
     "--hidden-import", "comtypes.gen",
     "--hidden-import", "pycaw.utils",
+
+    # Moonshine's native library. moonshine.dll is loaded by path from beside
+    # the package, and needs the onnxruntime.dll next to it, so both go into
+    # the bundle's moonshine_voice folder. The package's assets folder --
+    # sample recordings and a tiny model -- is left out.
+    "--collect-binaries", "moonshine_voice",
+
+    # The speech model itself; recognizer.model_dir() reads it from here.
+    "--add-data", f"{os.path.join('models', MODEL)}{os.pathsep}models/{MODEL}",
 ]
 
 for module in EXCLUDES:
@@ -236,6 +267,37 @@ def folder_size(folder):
     return total
 
 
+def fetch_model():
+    """Put the speech model in models/, downloading it the first time.
+
+    Returns its folder, or None if it could not be fetched. Moonshine's own
+    downloader keeps a cache in %LOCALAPPDATA%\\moonshine_voice, so a second
+    fetch is a copy rather than a download. models/ is not in git: 139 MB of
+    weights belongs in the build, not in the repository.
+    """
+    target = os.path.join(HERE, "models", MODEL)
+    if os.path.isdir(target) and os.listdir(target):
+        return target
+
+    try:
+        from moonshine_voice import ModelArch, get_model_for_language
+    except ImportError:
+        print("moonshine-voice is not installed. Run: "
+              "pip install -r requirements.txt")
+        return None
+
+    print(f"Fetching the speech model ({MODEL})...")
+    try:
+        source, _arch = get_model_for_language("en", ModelArch.SMALL_STREAMING)
+    except Exception as e:
+        print(f"Could not download the speech model: {e}")
+        return None
+
+    shutil.copytree(source, target)
+    print(f"Speech model ready in {target}")
+    return target
+
+
 def find_inno():
     """The Inno Setup command line compiler, or None if it is not installed.
 
@@ -332,12 +394,20 @@ def clean(path):
 
 def main():
     """Build the app folder, and the installer when asked."""
+    if "--fetch-model" in sys.argv:
+        return 0 if fetch_model() else 1
+
     if shutil.which("pyinstaller") is None:
         print("PyInstaller is not installed. Run: pip install pyinstaller")
         return 1
 
     if not os.path.isfile(os.path.join(HERE, ICON)):
         print(f"{ICON} is missing -- the .exe would get the default icon.")
+        return 1
+
+    # Bundled rather than downloaded on first run, so the installed app works
+    # offline from the start.
+    if fetch_model() is None:
         return 1
 
     # Remove stale output so the result is a clean, full rebuild.

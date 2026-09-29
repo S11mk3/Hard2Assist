@@ -15,12 +15,14 @@ FILE = os.path.join(USER_DIR, "settings.json")
 DEFAULTS = {
     "prefix": "computer",       # the wake word
     "listen_when": "always",    # "always" | "focused"
+    "recognizer": "auto",       # "auto" | "local" | "google"; see recognizer.py
 }
 
 # The values each setting may take. `prefix` is free text, checked by
 # valid_prefix() instead.
 CHOICES = {
     "listen_when": ("always", "focused"),
+    "recognizer": ("auto", "local", "google"),
 }
 
 _values = None

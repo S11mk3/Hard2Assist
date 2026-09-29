@@ -7,5 +7,9 @@ psutil>=7.2.2
 comtypes>=1.4.16
 pycaw>=20251023
 
+# The offline speech recogniser. Its model is not in the repository: run
+# `python build.py --fetch-model` once to put it in models/.
+moonshine-voice>=0.1.5
+
 # Only needed to build the .exe, not to run from source.
 pyinstaller>=6.21.0

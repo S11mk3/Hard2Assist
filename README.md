@@ -7,8 +7,9 @@
 Hard2Assist is a voice assistant for Windows. Say **"computer"** followed by a command
 and it opens programs, folders and websites, types for you, closes and minimizes windows,
 controls the volume, and answers questions about your PC — battery, time, disk space,
-CPU load — out loud. It installs from a single setup file and carries its own copy of
-Python, so there is nothing else to install.
+CPU load — out loud. It understands you on your own PC, so it works offline and nothing
+you say leaves the machine. It installs from a single setup file and carries its own copy
+of Python, so there is nothing else to install.
 
 The first time you run it, it talks you through a short setup out loud — pick your own
 wake word instead of "computer", and decide whether it listens all the time or only
@@ -28,10 +29,9 @@ Download (or build, see below) `Hard2Assist-Setup.exe` and run it. It asks where
 install, and whether you want a desktop shortcut. It does **not** ask for administrator
 rights: by default it installs just for you, under `%LOCALAPPDATA%\Programs`.
 
-You only need two things:
-
-- 🎤 **a microphone**
-- 🌐 **an internet connection** — recognition uses Google's free speech API
+All you need is 🎤 **a microphone**. Speech is recognised on your PC by
+[Moonshine](https://github.com/moonshine-ai/moonshine), a speech model that ships inside
+the installer, so no internet connection is needed.
 
 > **"Windows protected your PC"?** Click **More info → Run anyway**. Hard2Assist is not
 > signed with a code-signing certificate, and Windows shows that warning for every
@@ -42,9 +42,13 @@ You only need two things:
 
 ```
 pip install -r requirements.txt
+python build.py --fetch-model     # once: the 139 MB speech model, into models\
 python hard2assist.py             # the window
 python hard2assist.py --console   # the same thing in a terminal, no window
 ```
+
+Without the model it still runs, using Google's speech service over the internet instead,
+and says so when it starts.
 
 ### Building it yourself
 
@@ -53,7 +57,8 @@ pip install -r requirements.txt
 python build.py
 ```
 
-That writes `dist\Hard2Assist\` — the app, with Python beside it. Open the
+That writes `dist\Hard2Assist\` — the app, with Python and the speech model beside it
+(the model is downloaded into `models\` the first time). Open the
 `Hard2Assist.exe` inside and say `computer help`: seeing every command listed is how you
 know the build is complete, because a build missing a piece still starts and looks fine.
 
@@ -76,8 +81,9 @@ suspicious of that shape, because writing executables into a temp folder and run
 is what droppers do.
 
 Shipping a plain folder removes the unpacking step entirely (**~0.5 s to the window**),
-and the installer keeps the download a single file. Dropping the unused offline speech
-models and NumPy at the same time took the app from 67 MB to 29 MB.
+and the installer keeps the download a single file. Dropping the unused speech models
+SpeechRecognition bundles and NumPy at the same time took the app from 67 MB to 29 MB,
+before the Moonshine model was added.
 
 </details>
 
@@ -197,10 +203,10 @@ A few things worth knowing while you use it:
   saves whatever address you last copied in the browser. `computer forget music`
   takes either back out.
 
-- **It expects to be misheard.** Speech recognition hears **"clothes"** when you say
-  **"close"**, nearly every time. Commands carry a list of what they actually get
-  misheard as, and anything still unmatched goes through fuzzy matching. It always
-  tells you when it corrects something — you can see it in the screenshot above:
+- **It expects to be misheard.** Speech recognition can hear **"clothes"** when you say
+  **"close"**. Commands carry a list of what they actually get misheard as, and
+  anything still unmatched goes through fuzzy matching. It always tells you when it
+  corrects something — you can see it in the screenshot above:
 
   ```
   > clothes notepad
@@ -216,6 +222,22 @@ A few things worth knowing while you use it:
 
 - **It does not hear itself.** While it speaks, the microphone is off. Otherwise it
   would hear *"Closing one window"*, pick the word *close* out of it, and set off again.
+
+- **It listens on your PC.** Speech is turned into text by
+  [Moonshine](https://github.com/moonshine-ai/moonshine) small, a 139 MB speech model
+  that runs on the CPU: about 0.7 seconds per command even on a 2014 laptop, with
+  about 200 MB of memory. It detects speech before transcribing, so coughs, typing and
+  background noise are dropped rather than turned into words. If the model cannot load,
+  it falls back to Google's free speech service, which needs the internet, and says so
+  in the window.
+
+  To choose for yourself, set `"recognizer"` in `%APPDATA%\Hard2Assist\settings.json`:
+
+  | Value | Uses |
+  | --- | --- |
+  | `"auto"` | Moonshine, or Google when Moonshine is unavailable (the default) |
+  | `"local"` | Moonshine only — nothing ever goes online |
+  | `"google"` | Google only |
 
 ---
 
@@ -289,6 +311,7 @@ hard2assist.py      entry point -- the window, or --console
 gui.py              the window
 theme.py            colours and fonts, all in one place
 listener.py         the microphone loop
+recognizer.py       what was said: Moonshine on this PC, or Google as the fallback
 speech.py           the voice
 settings.py         what the user chose, saved between runs
 wizard.py           the spoken setup conversation
@@ -317,6 +340,8 @@ apps/
   installed.py      found in your Start Menu, plus ones you picked
   websites.py       sites
   itself.py         the app itself, so "focus yourself" has something to find
+
+models/             the speech model; not in git, fetched by build.py --fetch-model
 ```
 
 ---
@@ -344,8 +369,7 @@ apps/
 - **Closing Start Menu programs is best-effort.** They are found by window title, which
   does not always match the shortcut name. Programs you pick yourself are matched by
   their process and close reliably. Opening always works.
-- **Speech needs the internet.** Listening goes to Google's free speech API, so
-  Hard2Assist does not work offline. This is deliberate: an offline recogniser accurate
-  enough to be worth using costs far more in size and accuracy than it saves. The voice
-  that answers you is Windows' own and never leaves your PC — it is only the listening
-  that needs a connection.
+- **English only.** The speech model is Moonshine's English one, so commands have to be
+  spoken in English. The voice that answers is whichever Windows voice is installed.
+- **The installer is bigger than it used to be.** The speech model is bundled so the app
+  works offline from the first launch, which adds about 139 MB before compression.

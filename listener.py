@@ -11,6 +11,7 @@ import time
 
 import speech_recognition as sr
 
+import recognizer
 import settings
 import speech
 import win
@@ -30,15 +31,6 @@ ANSWER_TIMEOUT = 7
 # not started at that point, so without it the window would read
 # "Calibrating..." for the whole conversation.
 SETUP = "Setting up"
-
-# Silence added to both ends of a clip before it is recognised.
-#
-# Google returns an empty result for a short word with no silence around it: a
-# bare "no" or "yeah" comes back as nothing rather than as a mishearing.
-# listen() keeps up to 0.5s of lead-in, but only if the user waited that long
-# before speaking, and answering the instant a question ends leaves almost
-# none. Half a second each side leaves ordinary commands unchanged.
-PAD_SECONDS = 0.5
 
 
 _current = None
@@ -67,14 +59,18 @@ def strip_prefix(text, prefix):
     The wake word must be a whole word: "computers open notepad" is not a
     command, and with a short wake word like "max", "maximize notepad" would
     otherwise fire as "imize notepad".
+
+    The command keeps its case and punctuation -- "Computer, type Hello
+    there." gives "type Hello there." -- so `type` can type it as heard. The
+    registry does its own matching on a cleaned-up copy.
     """
-    match = re.match(rf"{re.escape(prefix.lower())}(?:$|[\s,.!?]+)(.*)",
-                     text.lower().strip())
+    match = re.match(rf"{re.escape(prefix)}(?:$|[\s,.!?]+)(.*)",
+                     text.strip(), re.IGNORECASE)
 
     if match is None:
         return None
 
-    return match.group(1).strip(" ,.")
+    return match.group(1).strip()
 
 
 def _greeting():
@@ -89,17 +85,6 @@ def _greeting():
         return "Hello, what can I help with?"
 
     return f"Hello {name}, what can I help with?"
-
-
-def _padded(audio):
-    """The clip with PAD_SECONDS of silence on each end. See PAD_SECONDS."""
-    silence = b"\x00" * int(audio.sample_rate * audio.sample_width * PAD_SECONDS)
-
-    return sr.AudioData(
-        silence + audio.frame_data + silence,
-        audio.sample_rate,
-        audio.sample_width,
-    )
 
 
 class Listener:
@@ -133,7 +118,7 @@ class Listener:
         # no microphone would still report "Listening".
         self._running = False
 
-        self._warned_offline = False
+        self._warned_unavailable = False
 
     # -- control, called from other threads -----------------------------------
 
@@ -159,7 +144,10 @@ class Listener:
         """Open the microphone and listen until stop() is called."""
         global _current
 
-        recognizer = sr.Recognizer()
+        # Loads while the microphone calibrates, which takes about as long.
+        recognizer.start()
+
+        sr_recognizer = sr.Recognizer()
 
         try:
             microphone = sr.Microphone()
@@ -189,17 +177,17 @@ class Listener:
                 # Takes the room's energy as the floor for what counts as
                 # speech. Measuring while the voice plays would lock the
                 # threshold above anything said afterwards.
-                recognizer.adjust_for_ambient_noise(source, duration=1)
+                sr_recognizer.adjust_for_ambient_noise(source, duration=1)
 
                 # Dynamic adjustment drifts the threshold down until
                 # background noise registers as speech, producing an endless
                 # stream of failed recognitions. Calibrate once and lock it.
-                recognizer.dynamic_energy_threshold = False
-                recognizer.energy_threshold = max(
-                    recognizer.energy_threshold * 1.2, 300
+                sr_recognizer.dynamic_energy_threshold = False
+                sr_recognizer.energy_threshold = max(
+                    sr_recognizer.energy_threshold * 1.2, 300
                 )
 
-                self._recognizer = recognizer
+                self._recognizer = sr_recognizer
                 self._source = source
 
                 # Published for current(): from here on there is a microphone
@@ -219,7 +207,7 @@ class Listener:
 
                     self._running = True
                     self.on_status("Listening")
-                    self._loop(recognizer, source)
+                    self._loop()
                 finally:
                     # Cleared before the handler below reports, so the speech
                     # pause hooks cannot overwrite a failure message.
@@ -243,10 +231,11 @@ class Listener:
         """Turn captured audio into text.
 
         The single point where recognition happens, for both the loop and the
-        setup conversation. Raises the speech_recognition errors, which
-        callers tell apart to distinguish "unintelligible" from "offline".
+        setup conversation; see recognizer.py for which engine does it. Raises
+        the speech_recognition errors, which callers tell apart to distinguish
+        "unintelligible" from "nothing can recognise speech right now".
         """
-        return self._recognizer.recognize_google(_padded(audio))
+        return recognizer.transcribe(self._recognizer, audio)
 
     def listen_once(self, timeout=ANSWER_TIMEOUT):
         """Capture one utterance with no wake word required, or None.
@@ -285,15 +274,16 @@ class Listener:
         except sr.UnknownValueError:
             return None
         except sr.RequestError as e:
-            # Named, because otherwise being offline is indistinguishable from
-            # mumbling and the user retries a question that cannot succeed.
-            detail(f"(could not reach the speech service: {e})")
+            # Named, because otherwise a recogniser that cannot run is
+            # indistinguishable from mumbling, and the user retries a
+            # question that cannot succeed.
+            detail(f"(speech recognition isn't working: {e})")
             return None
         except Exception as e:
             detail(f"Something went wrong recognising that: {e}")
             return None
 
-    def _loop(self, recognizer, source):
+    def _loop(self):
         """Listen, recognise, and hand each command to the callback."""
         while not self._stop.is_set():
             if not self._active.is_set():
@@ -313,8 +303,8 @@ class Listener:
                 self.on_status("Listening")
 
             try:
-                audio = recognizer.listen(
-                    source,
+                audio = self._recognizer.listen(
+                    self._source,
                     timeout=LISTEN_TIMEOUT,
                     phrase_time_limit=PHRASE_LIMIT,
                 )
@@ -333,18 +323,20 @@ class Listener:
                 self.on_status("Didn't catch that", transient=True)
                 continue
             except sr.RequestError as e:
-                self.on_status("No connection", transient=True)
-                if not self._warned_offline:
-                    say("I can't reach the speech service. "
-                        "Recognition needs an internet connection.")
+                # No recogniser can run: the offline model is unavailable and
+                # Google cannot be reached, or is not allowed. recognizer.py
+                # words the reason.
+                self.on_status("Can't recognise speech", transient=True)
+                if not self._warned_unavailable:
+                    say("I can't recognise speech right now.")
                     detail(f"({e})")
-                    self._warned_offline = True
+                    self._warned_unavailable = True
                 continue
             except Exception as e:
                 detail(f"Something went wrong listening: {e}")
                 continue
 
-            self._warned_offline = False
+            self._warned_unavailable = False
             self.on_status(f"Heard: {text}", transient=True)
 
             # Read every time rather than cached, so a new wake word chosen
