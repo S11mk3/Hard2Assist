@@ -10,22 +10,22 @@ to antivirus heuristics like a dropper. What users download is the installer
 built from that folder, so the single file to hand out still exists.
 """
 
+import ast
+import glob
 import os
 import shutil
 import subprocess
 import sys
 import time
 
+# The version lives in version.py, which the app reads too. It is written into
+# the .exe's resource block below and handed to the installer script.
+from version import AUTHOR as PUBLISHER
+from version import NAME, VERSION
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 ICON = "H2A.ico"
-NAME = "Hard2Assist"
-PUBLISHER = "Andrija Simic"
-
-# The single source of truth for the version. It is written into the .exe's
-# resource block below and handed to the installer script, so a release only
-# needs the number changed here.
-VERSION = "1.0.0"
 
 VERSION_FILE = "version_info.txt"
 INSTALLER_SCRIPT = "installer.iss"
@@ -43,6 +43,8 @@ INSTALLER_SCRIPT = "installer.iss"
 #   requests    with h2/hpack/hyperframe behind it; the Google recogniser uses
 #               urllib.request instead
 #   pocketsphinx, yaml, PIL     other optional recognisers and their baggage
+#   vosk        the offline recogniser, when installed. Through tqdm.gui it
+#               drags in matplotlib and a Qt binding (PySide6): 110 MB
 #   setuptools, distutils, pkg_resources    build-time tooling
 #   unittest, pydoc, pytest     development-only
 #
@@ -60,6 +62,7 @@ EXCLUDES = [
     "hpack",
     "hyperframe",
     "pocketsphinx",
+    "vosk",
     "unittest",
     "pydoc",
     "pytest",
@@ -101,34 +104,52 @@ OPTIONS = [
     # Command modules are discovered by scanning the disk at runtime, so
     # PyInstaller cannot see their imports and would omit them. The folder
     # ships as data; registry.py knows to look for it inside the bundle.
+    # What the commands import is added by command_imports() below.
     "--add-data", f"commands{os.pathsep}commands",
 
-    # Because the command modules are invisible to PyInstaller, so is
-    # everything they import. Without these the build succeeds but the .exe
-    # loads almost no commands. After changing this list, run the built .exe
-    # and check `computer help` still shows every command.
-    "--hidden-import", "apps",
-    "--hidden-import", "win",
-    "--hidden-import", "psutil",
-    "--hidden-import", "speech",
-
-    # Speech and volume both talk to Windows over COM.
+    # Speech and volume both talk to Windows over COM. comtypes.gen is
+    # generated at runtime, so no import of it exists for anything to find.
     "--hidden-import", "comtypes",
     "--hidden-import", "comtypes.stream",
     "--hidden-import", "comtypes.client",
     "--hidden-import", "comtypes.gen",
-
-    # Reached only from command modules, which PyInstaller cannot see.
-    "--hidden-import", "audio",
-    "--hidden-import", "pycaw",
     "--hidden-import", "pycaw.utils",
-    "--hidden-import", "session",
-    "--hidden-import", "spoken",
-    "--hidden-import", "listener",
 ]
 
 for module in EXCLUDES:
     OPTIONS += ["--exclude-module", module]
+
+
+def command_imports():
+    """Every module the command files import, as --hidden-import options.
+
+    Because the command modules are invisible to PyInstaller, so is everything
+    they import, and a module missed here gives a build that starts and looks
+    fine but silently loads fewer commands. Reading the imports straight out
+    of the files means a new command, or a new import in one, needs no change
+    here.
+    """
+    found = set()
+
+    for path in glob.glob(os.path.join(HERE, "commands", "*", "*.py")):
+        # Skipped by registry.py too, so never loaded.
+        if os.path.basename(path).startswith("_"):
+            continue
+
+        with open(path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), path)
+
+        # ast.walk reaches imports inside functions as well as at the top.
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                found.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                found.add(node.module)
+
+    options = []
+    for module in sorted(found):
+        options += ["--hidden-import", module]
+    return options
 
 
 # The Windows version resource. Both version fields have to be four numbers,
@@ -327,7 +348,7 @@ def main():
     write_version_file()
 
     result = subprocess.run(
-        ["pyinstaller", *OPTIONS, "hard2assist.py"],
+        ["pyinstaller", *OPTIONS, *command_imports(), "hard2assist.py"],
         cwd=HERE,
     )
     if result.returncode != 0:

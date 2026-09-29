@@ -2,7 +2,7 @@
 
 import session
 import spoken
-from output import detail, say
+from output import say
 
 NAME = "type"
 TAKES_ARG = True
@@ -47,9 +47,7 @@ def run(argument):
     # Typed before the confirmation, so a refusal is never announced as a
     # success. say() only queues speech, so nothing is spoken in between.
     if not spoken.type_out(text):
-        say(f"Windows wouldn't let me type into {target}.")
-        detail("That window runs as administrator and Hard2Assist does not. "
-               "Restart Hard2Assist as administrator to type into it.")
+        session.refused(f"type into {target}.")
         return
 
     say(f"Typed into {target}")

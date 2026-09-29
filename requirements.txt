@@ -1,8 +1,11 @@
-SpeechRecognition
-PyAudio
-psutil
-comtypes
-pycaw
+# Minimums are the versions Hard2Assist is tested with. pycaw in particular
+# must be recent: audio.py uses GetSpeakers().EndpointVolume, which older
+# releases do not have.
+SpeechRecognition>=3.16.1
+PyAudio>=0.2.14
+psutil>=7.2.2
+comtypes>=1.4.16
+pycaw>=20251023
 
 # Only needed to build the .exe, not to run from source.
-pyinstaller
+pyinstaller>=6.21.0

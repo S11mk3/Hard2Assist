@@ -299,6 +299,7 @@ spoken.py           turning what was heard into what gets typed
 ask.py              asking you for a file mid-command
 win.py              the only Windows API code
 audio.py            reading and setting the exact volume
+version.py          the version number and author, for the build and `introduce`
 build.py            builds the app folder, and the installer
 installer.iss       the installer, for Inno Setup
 

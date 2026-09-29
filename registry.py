@@ -29,8 +29,10 @@ A command module is any .py file under commands/<group>/ that defines:
 
 Commands are registered by their presence on disk: adding one means dropping
 a file into the folder, with no central list to update. Files whose name
-starts with an underscore are skipped, so a group can keep shared helpers
-alongside its commands.
+starts with an underscore are skipped.
+
+Code shared between commands lives at the top level (session.py, spoken.py):
+commands are loaded by path, so a command cannot import a file beside it.
 """
 
 import difflib

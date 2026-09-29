@@ -8,8 +8,8 @@ Only the App is remembered, never a window handle: Windows recycles handles,
 so a stored one can end up pointing at an unrelated window. The memory answers
 "which app", and the commands find the windows themselves.
 
-A module global is enough. Commands run one at a time, on the microphone
-thread, under the GUI's command_lock.
+A module global is enough. Commands run one at a time, all on the microphone
+thread.
 """
 
 import time
@@ -17,7 +17,7 @@ import time
 import apps
 import settings
 import win
-from output import say
+from output import detail, say
 
 # Ways of saying "the thing we were just talking about". Matched against the
 # whole argument rather than word by word.
@@ -34,6 +34,12 @@ PRONOUNS = {
 # characters. Without this the first few letters of a `type` land nowhere.
 FOCUS_SETTLE = 0.08
 
+# Why Windows refuses a window or keyboard request, nearly every time: the
+# window belongs to a process running as administrator, and Windows (UIPI)
+# does not let an ordinary process reach it.
+ADMIN_HINT = ("It runs as administrator and Hard2Assist does not. Restart "
+              "Hard2Assist as administrator to control it.")
+
 _last = None
 
 
@@ -48,21 +54,13 @@ def last():
     return _last
 
 
-def forget():
-    """Drop the memory. Nothing calls this yet; it exists for tests."""
-    global _last
-    _last = None
-
-
 def resolve(argument):
     """The App an argument names, or the last one acted on. None if unknown.
 
     What the window commands call instead of apps.find(), adding the case
     where the argument is "it" rather than a name.
 
-    A leading "all " is not handled here: `close`, `kill`, `minimize`,
-    `fullscreen` and `shrink` strip it themselves, because it changes what
-    they do rather than what they do it to.
+    A leading "all " is not handled here; see split_all().
     """
     spoken = argument.lower().strip()
 
@@ -92,6 +90,83 @@ def unknown(argument):
         return
 
     say(f"I don't know an app called {argument}.")
+
+
+def refused(what):
+    """Report a request Windows turned down: "Windows won't let me <what>"."""
+    say(f"Windows won't let me {what}")
+    detail(ADMIN_HINT)
+
+
+# -- the window commands -----------------------------------------------------
+#
+# Shared here because commands are loaded by path and cannot import each
+# other; see registry.py.
+
+
+def split_all(argument):
+    """Take a leading "all " off: ("all notepad") -> ("notepad", True).
+
+    Kept apart from resolve() because it changes what a window command does
+    rather than what it does it to: `close cmd` closes the newest console,
+    `close all cmd` every one.
+    """
+    argument = argument.strip()
+
+    if argument.lower().startswith("all "):
+        return argument[4:].strip(), True
+
+    return argument, False
+
+
+def target_windows(app, every):
+    """Every window of an app, or only the one whose process started last.
+
+    The newest one by default is what makes `close cmd` shut the console just
+    opened by voice rather than the one the user was working in.
+    """
+    if every:
+        return win.windows_of(app)
+
+    newest = win.newest_window_of(app)
+    return [newest] if newest else []
+
+
+def each_window(argument, action, done, verb):
+    """The whole of `minimize`, `fullscreen` and `shrink`.
+
+    Runs `action(hwnd)`, which returns whether it worked, on every window of
+    the app the argument names. Every one rather than only the front one:
+    leaving the app's others as they were would look like the command half
+    worked. "all notepad" is accepted, since `close` and `kill` take it and it
+    is what happens anyway.
+
+    `done` names the success in the confirmation ("Minimized"), and `verb` the
+    request in the refusal ("minimize").
+    """
+    argument, _every = split_all(argument)
+
+    app = resolve(argument)
+    if app is None:
+        unknown(argument)
+        return
+
+    handles = win.windows_of(app)
+    if not handles:
+        say(f"{app.name} isn't open.")
+        return
+
+    changed = sum(1 for hwnd in handles if action(hwnd))
+
+    if changed:
+        window = "window" if changed == 1 else "windows"
+        say(f"{done} {changed} {app.name} {window}")
+
+    if changed < len(handles):
+        refused(f"{verb} {app.name}")
+
+
+# -- the keyboard commands ---------------------------------------------------
 
 
 def _app_name(title):

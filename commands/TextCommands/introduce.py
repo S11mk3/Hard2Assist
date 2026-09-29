@@ -12,6 +12,7 @@ import apps
 import registry
 import settings
 from output import detail, say
+from version import AUTHOR, VERSION
 
 NAME = "introduce"
 TAKES_ARG = False
@@ -46,11 +47,6 @@ The short version is spoken; the version number, the wake word and where
 your settings are kept are written here.\
 """
 
-MAKER = "Andrija Simic"
-
-# Kept in step with build.py, which is where a release sets the version.
-VERSION = "1.0.0"
-
 GAP = "  "
 
 
@@ -59,7 +55,7 @@ def _rows(commands, total, prefix):
     return (
         ("Name", "Hard2Assist"),
         ("Version", VERSION),
-        ("Made by", MAKER),
+        ("Made by", AUTHOR),
         ("What I am", "A voice assistant for Windows"),
         ("Wake word", f"'{prefix}', said before every command"),
         ("I know", f"{len(commands)} commands and {total} apps, "
@@ -76,7 +72,7 @@ def run():
     total = sum(apps.counts().values())
     prefix = settings.get("prefix")
 
-    say(f"I'm Hard2Assist, a voice assistant for Windows, made by {MAKER}. "
+    say(f"I'm Hard2Assist, a voice assistant for Windows, made by {AUTHOR}. "
         f"I'm written in Python: I hear you through Google's speech "
         f"recognition, and answer in this PC's own Windows voice. "
         f"I know {len(commands)} commands and {total} apps. "

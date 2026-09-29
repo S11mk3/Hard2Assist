@@ -60,8 +60,8 @@ TIMEOUT = 12
 
 # Consecutive silences before it gives up on its own.
 #
-# The escape hatch. Dictation holds the command lock on the microphone thread
-# for as long as it runs, so nothing else can be said while it does -- not
+# The escape hatch. Dictation runs on the microphone thread and holds it for
+# as long as it runs, so no other command can be heard while it does -- not
 # `stop`, not `quiet`.
 MAX_SILENCE = 3
 

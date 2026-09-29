@@ -91,6 +91,12 @@ def run(argument):
         return
 
     if what.startswith(("mute", "unmute", "silence")):
+        # The key is a toggle, so an "unmute" while the sound is already on
+        # would mute it. "mute" stays a toggle, as ABOUT promises.
+        if what.startswith("unmute") and audio.is_muted() is False:
+            say("Sound is already on")
+            return
+
         win.tap_key(win.VK_VOLUME_MUTE)
         # The key is a toggle, so read the result back rather than guess.
         muted = audio.is_muted()
