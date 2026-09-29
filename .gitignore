@@ -2,5 +2,6 @@
 build/
 dist/
 installer/
+models/
 version_info.txt
 *.spec

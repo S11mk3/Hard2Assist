@@ -90,7 +90,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 
 [Messages]
-WelcomeLabel2=This will install [name/ver] on your computer.%n%nHard2Assist listens for a wake word and then opens programs and websites, moves and closes windows, types for you, controls the volume, and answers questions about your PC out loud.%n%nIt needs a microphone and an internet connection.
+WelcomeLabel2=This will install [name/ver] on your computer.%n%nHard2Assist listens for a wake word and then opens programs and websites, moves and closes windows, types for you, controls the volume, and answers questions about your PC out loud.%n%nIt needs a microphone. Speech is recognised on your PC, so it works offline and nothing you say leaves it.
 
 
 [Tasks]

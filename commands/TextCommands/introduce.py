@@ -9,6 +9,7 @@ changed or a command list that has grown since.
 """
 
 import apps
+import recognizer
 import registry
 import settings
 from output import detail, say
@@ -50,6 +51,20 @@ your settings are kept are written here.\
 GAP = "  "
 
 
+def _listening():
+    """How speech is being recognised right now, as (spoken, written).
+
+    Asked live rather than assumed: the offline model can fail to load, and
+    then Google is doing the listening.
+    """
+    if recognizer.is_local():
+        return ("a speech model that runs on this PC",
+                "Moonshine, on this PC, so nothing you say leaves it")
+
+    return ("Google's speech recognition",
+            "Google's free speech API, so I need the internet")
+
+
 def _rows(commands, total, prefix):
     """The written introduction, as (label, value) pairs."""
     return (
@@ -61,7 +76,7 @@ def _rows(commands, total, prefix):
         ("I know", f"{len(commands)} commands and {total} apps, "
                    f"folders and websites"),
         ("Written in", "Python, with a Tk window"),
-        ("Listening", "Google's free speech API, so I need the internet"),
+        ("Listening", _listening()[1]),
         ("Speaking", "the Windows voice on this PC, which never leaves it"),
         ("Settings", settings.FILE),
     )
@@ -73,8 +88,8 @@ def run():
     prefix = settings.get("prefix")
 
     say(f"I'm Hard2Assist, a voice assistant for Windows, made by {AUTHOR}. "
-        f"I'm written in Python: I hear you through Google's speech "
-        f"recognition, and answer in this PC's own Windows voice. "
+        f"I'm written in Python: I hear you through {_listening()[0]}, "
+        f"and answer in this PC's own Windows voice. "
         f"I know {len(commands)} commands and {total} apps. "
         f"Say {prefix} help to see them all.")
 

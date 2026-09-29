@@ -54,12 +54,20 @@ STOP = object()
 # to one command or another.
 ARG_FILLER = ("to", "the", "a", "an", "at", "on", "of", "is", "for")
 
+# Politeness on the end of an argument: "open notepad, please" names notepad,
+# not an app called "notepad please".
+TRAILING_FILLER = ("please", "now")
+
 # Words that introduce a command without belonging to it. Stripped from the
 # front of an argument spoken *before* the command word, so "turn up the
 # volume" reaches `volume` with "up", as "volume up" does.
 LEAD_WORDS = ("turn", "set", "put", "make", "change", "adjust", "please",
               "can", "could", "would", "you", "i", "just", "want", "let",
               "lets", "let's")
+
+# Punctuation a recogniser attaches to words -- "Notepad," "open?" "50." --
+# taken off each end before matching. Apostrophes stay: "what's" is a word.
+PUNCTUATION = ",.?!;:\"()"
 
 # How close the first word must be to a command name before it is taken *as*
 # that command and run.
@@ -135,8 +143,8 @@ def load():
 def _build_aliases(commands):
     """Map each declared alias onto its command.
 
-    Aliases absorb consistent recognition errors: Google's recogniser returns
-    "clothes" for "close" more often than not.
+    Aliases absorb consistent recognition errors: Google's recogniser, the
+    fallback, returns "clothes" for "close" more often than not.
     """
     global _aliases
     _aliases = {}
@@ -207,15 +215,42 @@ def _phrase(words):
     return None, None, None
 
 
-def _argument(words, verbatim=False):
+def _tokens(utterance):
+    """The utterance as (words, spoken): words to match, and words as heard.
+
+    The offline recogniser capitalises and punctuates -- "What's open?",
+    "Open Notepad, please." -- while command names, aliases and phrases are
+    bare lowercase words. `words` is the lowercased copy with punctuation
+    taken off each end, which everything is matched against. `spoken` keeps
+    each word as heard, for a VERBATIM command's text. The two lists stay the
+    same length, word for word.
+    """
+    words, spoken = [], []
+
+    for token in utterance.split():
+        word = token.lower().replace("\u2019", "'").strip(PUNCTUATION)
+        if word:
+            words.append(word)
+            spoken.append(token)
+
+    return words, spoken
+
+
+def _argument(words, spoken, verbatim=False):
     """The words after a command word, as the argument the command expects.
 
-    A VERBATIM command keeps every word: filler is only glue when the
-    argument names a thing, not when the argument *is* the text.
+    A VERBATIM command gets them as heard, with every word, capital and comma:
+    filler is only glue when the argument names a thing, not when the
+    argument *is* the text. Anything else gets the cleaned-up words.
     """
-    if not verbatim:
-        while words and words[0] in ARG_FILLER:
-            words = words[1:]
+    if verbatim:
+        return " ".join(spoken).strip()
+
+    while words and words[0] in ARG_FILLER:
+        words = words[1:]
+
+    while words and words[-1] in TRAILING_FILLER:
+        words = words[:-1]
 
     return " ".join(words).strip()
 
@@ -267,7 +302,7 @@ def understand(commands, utterance):
     over every word turns ordinary filler into a command often enough to be
     worse than not matching at all.
     """
-    words = utterance.lower().split()
+    words, spoken = _tokens(utterance)
     if not words:
         return None, None, None
 
@@ -281,13 +316,14 @@ def understand(commands, utterance):
     if phrase_name is not None and not (exact and index < start):
         # Nothing to report as corrected: the phrase matched word for word.
         verbatim = getattr(commands[phrase_name], "VERBATIM", False)
-        return phrase_name, _argument(words[after:], verbatim), None
+        argument = _argument(words[after:], spoken[after:], verbatim)
+        return phrase_name, argument, None
 
     # 2: a command word somewhere in the sentence.
     if name is not None:
         verbatim = getattr(commands[name], "VERBATIM", False)
         corrected = words[index] if words[index] != name else None
-        argument = _argument(words[index + 1:], verbatim)
+        argument = _argument(words[index + 1:], spoken[index + 1:], verbatim)
 
         # Only when nothing followed the command word, so "volume up" and
         # "turn the volume up" both take their argument from the right. A
@@ -302,7 +338,7 @@ def understand(commands, utterance):
                                       cutoff=MATCH_CUTOFF)
     if close:
         verbatim = getattr(commands[close[0]], "VERBATIM", False)
-        return close[0], _argument(words[1:], verbatim), words[0]
+        return close[0], _argument(words[1:], spoken[1:], verbatim), words[0]
 
     return None, None, None
 
@@ -329,7 +365,7 @@ def _suggest(commands, utterance):
     them suggests nonsense -- "make me a sandwich" scores 0.86 against
     `focus`'s "switch".
     """
-    for word in utterance.lower().split():
+    for word in _tokens(utterance)[0]:
         if len(word) < 3:
             continue
 
@@ -357,7 +393,7 @@ def _report_unknown(commands, utterance):
 
     # No command is close, but the utterance may name an app on its own --
     # "computer settings" or "computer notepad" -- said without a verb.
-    app = apps.find(utterance)
+    app = apps.find(" ".join(_tokens(utterance)[0]))
     if app is not None:
         say(f"I don't know '{utterance}'. If you meant the app, say "
             f"{settings.get('prefix')} open {app.name}.")
