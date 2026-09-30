@@ -55,6 +55,17 @@ def _hear(ears):
     heard = ears.listen_once()
     if not heard:
         return None
+
+    # In a noisy room the recording starts on the room, so the recogniser can
+    # write out a sentence of background before the answer. The answer comes
+    # last, so when there are several sentences the last one is it -- or the
+    # background's first word would be offered as the new wake word.
+    sentences = [sentence for sentence
+                 in re.split(r"(?<=[.!?])\s+", heard.strip())
+                 if re.search(r"\w", sentence)]
+    if sentences:
+        heard = sentences[-1]
+
     heard = heard.lower().replace("\u2019", "'")
     answer = " ".join(re.findall(r"[\w']+", heard))
     if not answer:

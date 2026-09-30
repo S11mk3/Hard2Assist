@@ -20,7 +20,7 @@
 ; Both are supplied by build.py; the fallbacks let the script be compiled by
 ; hand from the Inno Setup IDE.
 #ifndef AppVersion
-  #define AppVersion "1.0.1"
+  #define AppVersion "1.0.3"
 #endif
 #ifndef AppSource
   #define AppSource "dist\Hard2Assist"

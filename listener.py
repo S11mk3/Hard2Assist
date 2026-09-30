@@ -5,6 +5,9 @@ the main thread. Both receive recognised commands through the same callbacks,
 so listening behaves identically either way.
 """
 
+import audioop
+import collections
+import difflib
 import re
 import threading
 import time
@@ -32,6 +35,25 @@ ANSWER_TIMEOUT = 7
 # "Calibrating..." for the whole conversation.
 SETUP = "Setting up"
 
+# Telling speech from the room; see _threshold().
+NOISE_WINDOW = 10        # seconds of recent audio the room's level is read from
+NOISE_PERCENTILE = 0.3   # how far up those levels, quietest first, the room is
+SPEECH_RATIO = 2.0       # how much louder than the room counts as speech
+MIN_THRESHOLD = 300      # the floor, however quiet the room
+CALIBRATE_SECONDS = 1.5  # the first measurement, before anything is said
+
+# Read and thrown away after the voice speaks: what the microphone buffered
+# while it talked, and the room's echo of it. Without this the last word of a
+# setup question -- "...or say keep" -- can come back as the answer.
+SETTLE_SECONDS = 0.3
+
+# Said in front of the wake word without being part of the command.
+GREETINGS = ("hey", "hi", "hello", "ok", "okay")
+
+# How close a heard word must be to the wake word to be taken for it. The same
+# cutoff registry.py uses for command names.
+WAKE_CUTOFF = 0.75
+
 
 _current = None
 
@@ -49,28 +71,99 @@ def current():
     return _current
 
 
-def strip_prefix(text, prefix):
+def _after_prefix(text, prefix):
+    """The text after the wake word, if the text opens with it, else None.
+
+    The wake word must be a whole word: with a short wake word like "max",
+    "maximize notepad" would otherwise fire as "imize notepad".
+    """
+    match = re.match(rf"{re.escape(prefix)}(?:$|[\s,.!?]+)(.*)", text,
+                     re.IGNORECASE | re.DOTALL)
+    return None if match is None else match.group(1).strip()
+
+
+def _sounds_like(heard, prefix):
+    """Whether a heard word is the wake word, misheard.
+
+    A word that merely starts with the wake word is a different word, not a
+    mishearing of it: "computers are slow" is a sentence about computers.
+    """
+    heard, prefix = heard.lower(), prefix.lower()
+    if heard != prefix and heard.startswith(prefix):
+        return False
+    return difflib.SequenceMatcher(None, heard, prefix).ratio() >= WAKE_CUTOFF
+
+
+def _misheard_prefix(text, prefix):
+    """Each (command, as heard) the text could be, opening with the wake word
+    misheard: as one word ("commuter"), or as two the recogniser split it
+    into ("compute her").
+
+    Both are offered, because both can pass: "compute" is close enough on its
+    own, and only the command check tells "her, open notepad" from "open
+    notepad".
+    """
+    words = list(re.finditer(r"[\w']+", text))[:2]
+
+    for count in (1, 2):
+        if len(words) < count or words[0].start() > 0:
+            return
+        heard = "".join(word.group() for word in words[:count])
+        if _sounds_like(heard, prefix):
+            end = words[count - 1].end()
+            yield text[end:].lstrip(" ,.!?"), text[:end].lower()
+
+
+def find_command(text, prefix, opens_with_command=None):
     """Extract the command from an utterance.
 
-    Spoken input must start with the wake word, so that ordinary conversation
-    ("I bought a computer yesterday") does not trigger commands. Returns the
-    command text, or None when the wake word is absent.
+    Returns (command, heard_as). command is None when there is no wake word.
+    heard_as is what was taken for the wake word when it was not heard as
+    itself -- "commuter" -- and None when it was.
 
-    The wake word must be a whole word: "computers open notepad" is not a
-    command, and with a short wake word like "max", "maximize notepad" would
-    otherwise fire as "imize notepad".
+    The wake word has to come first, so that ordinary conversation ("I bought
+    a computer yesterday") does not trigger commands. Opening the utterance,
+    spelled exactly, it always counts, as it always has.
+
+    The recogniser gets it wrong often enough for that to fail people, though:
+    a noisy room puts the background in front of it ("The game's on.
+    Computer, volume up."), an accent turns it into "commuter", and a quiet
+    start loses its first syllable. So it is also looked for at the start of
+    every sentence, after a "hey" or "okay", and misheard. Those only count
+    when `opens_with_command` says the rest starts like a command, because
+    they are guesses; without it only the exact wake word works.
 
     The command keeps its case and punctuation -- "Computer, type Hello
     there." gives "type Hello there." -- so `type` can type it as heard. The
     registry does its own matching on a cleaned-up copy.
     """
-    match = re.match(rf"{re.escape(prefix)}(?:$|[\s,.!?]+)(.*)",
-                     text.strip(), re.IGNORECASE)
+    text = text.strip()
 
-    if match is None:
-        return None
+    command = _after_prefix(text, prefix)
+    if command is not None:
+        return command, None
 
-    return match.group(1).strip()
+    if opens_with_command is None:
+        return None, None
+
+    starts = [0] + [match.end() for match in re.finditer(r"[.!?]+\s+", text)]
+    greeting = rf"(?:{'|'.join(GREETINGS)})[\s,.!?]+"
+
+    for start in starts:
+        sentence = text[start:]
+        sentence = re.sub(rf"^{greeting}", "", sentence, flags=re.IGNORECASE)
+
+        exact = _after_prefix(sentence, prefix)
+        if exact is not None:
+            candidates = [(exact, None)]
+        else:
+            candidates = _misheard_prefix(sentence, prefix)
+
+        for command, heard_as in candidates:
+            if command and opens_with_command(command):
+                return command, heard_as
+
+    return None, None
 
 
 def _greeting():
@@ -87,12 +180,74 @@ def _greeting():
     return f"Hello {name}, what can I help with?"
 
 
+class _Meter:
+    """The microphone's stream, remembering how loud everything read was.
+
+    Stands in for sr.Microphone's own stream, which listen() reads a chunk at
+    a time, so every chunk is measured -- speech, silence and noise alike.
+    That is what makes the room's level trustworthy. speech_recognition's own
+    dynamic threshold learns only from chunks it has already judged quieter
+    than the threshold, so it can only ever learn that the room is quieter
+    than it thought, and it sinks until the noise counts as speech.
+    """
+
+    def __init__(self, stream, sample_width, chunk, rate):
+        self._stream = stream
+        self._width = sample_width
+        self._chunk = chunk
+        self._per_second = rate / chunk
+        self.levels = collections.deque(
+            maxlen=max(1, int(NOISE_WINDOW * self._per_second)))
+
+    def read(self, size):
+        buffer = self._stream.read(size)
+        if buffer:
+            self.levels.append(audioop.rms(buffer, self._width))
+        return buffer
+
+    def measure(self, seconds):
+        """Listen to the room for a while, keeping only its levels."""
+        for _ in range(max(1, round(seconds * self._per_second))):
+            self.read(self._chunk)
+
+    def skip(self, seconds):
+        """Read and discard, without measuring."""
+        for _ in range(max(1, round(seconds * self._per_second))):
+            self._stream.read(self._chunk)
+
+    def close(self):
+        self._stream.close()
+
+
+def _threshold(levels):
+    """The loudness that counts as speech, from the room's recent levels.
+
+    The room is read from low down the levels rather than their average.
+    A door, a burst of television, a friend talking while the app starts, or
+    the commands themselves only ever fill the top of the range, so none of
+    them can lift the threshold above a quieter voice -- and when one happens
+    anyway, it has left the window within NOISE_WINDOW seconds. Even steady
+    dictation leaves the gaps between words at the room's level.
+    """
+    if not levels:
+        return MIN_THRESHOLD
+
+    ordered = sorted(levels)
+    room = ordered[int(len(ordered) * NOISE_PERCENTILE)]
+    return max(MIN_THRESHOLD, room * SPEECH_RATIO)
+
+
 class Listener:
     """Listens on the microphone and hands recognised commands to a callback."""
 
-    def __init__(self, on_command, on_status, on_ready=None, may_listen=None):
+    def __init__(self, on_command, on_status, on_ready=None, may_listen=None,
+                 opens_with_command=None):
         self.on_command = on_command    # called with the recognised command text
         self.on_status = on_status      # on_status(text, transient=False)
+
+        # Optional predicate: whether some text starts the way a command does.
+        # Lets a misheard or late wake word count; see find_command().
+        self.opens_with_command = opens_with_command
 
         # Called once with this Listener after the microphone is calibrated
         # and before the loop starts, so the setup conversation can use the
@@ -107,7 +262,12 @@ class Listener:
         # Set once the microphone is open, so listen_once() can reuse them.
         self._recognizer = None
         self._source = None
+        self._meter = None
         self._gated = False
+
+        # Set whenever the voice starts speaking, so the next listen first
+        # lets the room fall quiet; see SETTLE_SECONDS.
+        self._voice_spoke = False
 
         self._stop = threading.Event()
         self._active = threading.Event()
@@ -125,6 +285,7 @@ class Listener:
     def pause(self):
         """Stop capturing audio until resume() is called."""
         self._active.clear()
+        self._voice_spoke = True
         if self._running:
             self.on_status("Paused")
 
@@ -163,6 +324,13 @@ class Listener:
 
         try:
             with microphone as source:
+                # Everything listen() reads from here on passes through the
+                # meter, so the threshold can follow the room. The Microphone
+                # closes it on the way out, and the meter passes that on.
+                self._meter = _Meter(source.stream, source.SAMPLE_WIDTH,
+                                     source.CHUNK, source.SAMPLE_RATE)
+                source.stream = self._meter
+
                 self.on_status("Calibrating for background noise...")
 
                 # Greeting first, and waiting for it to finish, keeps the
@@ -174,18 +342,19 @@ class Listener:
                     say(_greeting())
                     speech.wait()
 
-                # Takes the room's energy as the floor for what counts as
-                # speech. Measuring while the voice plays would lock the
-                # threshold above anything said afterwards.
-                sr_recognizer.adjust_for_ambient_noise(source, duration=1)
+                # A first measure of the room, so the threshold is sensible
+                # before anything is said. It used to be the only one: taken
+                # in a single second and locked, so a loud moment while the
+                # app started left it deaf to quieter voices for the whole
+                # session. Now it is only a start; _listen() keeps
+                # re-reading the room.
+                self._settle()
+                self._meter.measure(CALIBRATE_SECONDS)
 
-                # Dynamic adjustment drifts the threshold down until
-                # background noise registers as speech, producing an endless
-                # stream of failed recognitions. Calibrate once and lock it.
+                # speech_recognition's own adjustment is left off: it sinks
+                # until noise counts as speech. See _Meter.
                 sr_recognizer.dynamic_energy_threshold = False
-                sr_recognizer.energy_threshold = max(
-                    sr_recognizer.energy_threshold * 1.2, 300
-                )
+                sr_recognizer.energy_threshold = _threshold(self._meter.levels)
 
                 self._recognizer = sr_recognizer
                 self._source = source
@@ -237,6 +406,31 @@ class Listener:
         """
         return recognizer.transcribe(self._recognizer, audio)
 
+    def _settle(self):
+        """Let the voice's last words clear the microphone, if it just spoke.
+
+        Only then: dictation listens again the moment a line is typed, and a
+        pause on every listen would cut the start off the next sentence.
+        """
+        if self._voice_spoke:
+            self._voice_spoke = False
+            self._meter.skip(SETTLE_SECONDS)
+
+    def _listen(self, timeout):
+        """Capture one phrase, then re-read the room's level.
+
+        The single point audio is captured, for the loop and listen_once()
+        alike, so the threshold keeps following the room however the app is
+        listening. Raises what listen() raises.
+        """
+        self._settle()
+        try:
+            return self._recognizer.listen(
+                self._source, timeout=timeout, phrase_time_limit=PHRASE_LIMIT
+            )
+        finally:
+            self._recognizer.energy_threshold = _threshold(self._meter.levels)
+
     def listen_once(self, timeout=ANSWER_TIMEOUT):
         """Capture one utterance with no wake word required, or None.
 
@@ -254,9 +448,7 @@ class Listener:
         self.on_status("Listening")
 
         try:
-            audio = self._recognizer.listen(
-                self._source, timeout=timeout, phrase_time_limit=PHRASE_LIMIT
-            )
+            audio = self._listen(timeout)
         except sr.WaitTimeoutError:
             return None
         except Exception as e:
@@ -303,11 +495,7 @@ class Listener:
                 self.on_status("Listening")
 
             try:
-                audio = self._recognizer.listen(
-                    self._source,
-                    timeout=LISTEN_TIMEOUT,
-                    phrase_time_limit=PHRASE_LIMIT,
-                )
+                audio = self._listen(LISTEN_TIMEOUT)
             except sr.WaitTimeoutError:
                 # Silence; the normal case.
                 continue
@@ -337,10 +525,24 @@ class Listener:
                 continue
 
             self._warned_unavailable = False
-            self.on_status(f"Heard: {text}", transient=True)
 
             # Read every time rather than cached, so a new wake word chosen
             # through `customize` takes effect on the next utterance.
-            command = strip_prefix(text, settings.get("prefix"))
+            prefix = settings.get("prefix")
+            command, heard_as = find_command(text, prefix,
+                                             self.opens_with_command)
+
+            if command is None:
+                # Said, so that someone whose wake word keeps being misheard
+                # can see that they were heard -- otherwise it looks exactly
+                # like a microphone that picks up nothing.
+                self.on_status(f'Heard "{text}" (no wake word)',
+                               transient=True)
+                continue
+
+            self.on_status(f"Heard: {text}", transient=True)
+
             if command:
+                if heard_as:
+                    detail(f"(heard '{heard_as}', taking it as '{prefix}')")
                 self.on_command(command)

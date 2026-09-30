@@ -5,5 +5,5 @@ build.py stamps these into the .exe and hands them to the installer, and
 """
 
 NAME = "Hard2Assist"
-VERSION = "1.0.1"
+VERSION = "1.0.3"
 AUTHOR = "Andrija Simic"
