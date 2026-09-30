@@ -216,12 +216,29 @@ A few things worth knowing while you use it:
   App names get the same treatment: `computer open ccleaner` finds *CCleaner 7*, and
   `computer open obs` finds *OBS Studio*.
 
+  So does the wake word. An accent or a clipped start turns "computer" into
+  *"commuter"*, *"compute her"* or *"puter"*, and in a noisy room the recogniser often
+  writes out a sentence of background before it. A near miss counts, so does
+  **"hey computer"** or **"okay computer"**, and so does the wake word starting any
+  sentence in what was heard, not just the first. Those are guesses, so they only
+  count when a command comes straight after: *"commuter trains are late"* and *"I
+  bought a computer yesterday"* still do nothing, and neither does *"computers"*,
+  which is a different word. When something is heard without the wake word the
+  window says so — `Heard "…" (no wake word)` — so you can tell a misheard wake
+  word from a microphone that heard nothing.
+
 - **`close` closes the right window.** `close cmd` closes the **most recently opened**
   cmd, so opening one by voice and closing it leaves the one you were already working
   in alone. `close all cmd` closes every one.
 
 - **It does not hear itself.** While it speaks, the microphone is off. Otherwise it
   would hear *"Closing one window"*, pick the word *close* out of it, and set off again.
+
+- **It keeps up with the room.** How loud counts as speech is measured from the room
+  when it starts, and then re-measured all the time from the last ten seconds, so a
+  television turned up, a fan switched off, or somebody talking while it started does
+  not leave it deaf to a quieter voice for the rest of the session. Bursts and your own
+  commands are ignored in that measurement; only the room's steady level counts.
 
 - **It listens on your PC.** Speech is turned into text by
   [Moonshine](https://github.com/moonshine-ai/moonshine) small, a 139 MB speech model
@@ -369,6 +386,11 @@ models/             the speech model; not in git, fetched by build.py --fetch-mo
 - **Closing Start Menu programs is best-effort.** They are found by window title, which
   does not always match the shortcut name. Programs you pick yourself are matched by
   their process and close reliably. Opening always works.
+- **Loud rooms.** Hearing starts on loudness, so it cannot tell your voice from people
+  talking or a television near the microphone. In a loud room it still hears you, but
+  a recording can run on with the background in it, and a quiet voice from across the
+  room can be lost under it. Speak within arm's length of the microphone there, and
+  a headset works best.
 - **English only.** The speech model is Moonshine's English one, so commands have to be
   spoken in English. The voice that answers is whichever Windows voice is installed.
 - **The installer is bigger than it used to be.** The speech model is bundled so the app

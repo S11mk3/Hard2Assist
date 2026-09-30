@@ -48,6 +48,8 @@ def run_console():
         on_command=on_command,
         on_status=on_status,
         on_ready=wizard.on_ready,
+        opens_with_command=lambda text: registry.opens_with_command(
+            commands, text),
     )
 
     # Mute the microphone while speaking, so the app does not hear its own

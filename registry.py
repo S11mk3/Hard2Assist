@@ -77,6 +77,12 @@ MATCH_CUTOFF = 0.75
 # MATCH_CUTOFF, because this only produces advice the user can ignore.
 SUGGEST_CUTOFF = 0.7
 
+# Words a command can follow and still be the first thing asked for: "can you
+# open notepad", "what's the time", "tell me the battery". See
+# opens_with_command().
+OPENERS = frozenset(LEAD_WORDS + ARG_FILLER
+                    + ("what", "what's", "whats", "how", "much", "tell", "me"))
+
 
 def _roots():
     """Directories that may contain a commands/ folder.
@@ -341,6 +347,32 @@ def understand(commands, utterance):
         return close[0], _argument(words[1:], spoken[1:], verbatim), words[0]
 
     return None, None, None
+
+
+def opens_with_command(commands, utterance):
+    """Whether an utterance starts the way a command does.
+
+    For the listener, when the wake word was a guess: misheard, or found
+    after the start of what was heard. understand() takes a command word from
+    anywhere in a sentence, which is right after a clear wake word and far
+    too loose after a doubtful one -- "commuter traffic made me lose track of
+    time" would answer with the time. Here a command name, alias or phrase
+    has to come first, after nothing but OPENERS.
+    """
+    words = _tokens(utterance)[0]
+
+    for i, word in enumerate(words):
+        for phrase, _name in _phrases:
+            if tuple(words[i:i + len(phrase)]) == phrase:
+                return True
+
+        if word in commands or word in _aliases:
+            return True
+
+        if word not in OPENERS:
+            return False
+
+    return False
 
 
 def usage(module):

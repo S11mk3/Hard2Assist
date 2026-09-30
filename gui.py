@@ -105,6 +105,8 @@ class App:
             on_status=self.status_from_any_thread,
             on_ready=wizard.on_ready,
             may_listen=self.may_listen,
+            opens_with_command=lambda text: registry.opens_with_command(
+                self.commands, text),
         )
 
         # Mute the microphone while speaking, or the app hears its own replies
