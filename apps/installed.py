@@ -95,7 +95,7 @@ def _user_entries():
     global _entries
     if _entries is None:
         try:
-            with open(USER_FILE, "r", encoding="utf-8") as f:
+            with open(USER_FILE, encoding="utf-8") as f:
                 loaded = json.load(f)
         except (OSError, ValueError):
             loaded = {}

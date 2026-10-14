@@ -5,3 +5,6 @@ installer/
 models/
 version_info.txt
 *.spec
+.venv/
+.pytest_cache/
+.ruff_cache/

@@ -23,5 +23,5 @@ def blend(colour_a, colour_b, amount):
     """Mix two #rrggbb colours. amount=0 gives colour_a, amount=1 gives colour_b."""
     a = [int(colour_a[i:i + 2], 16) for i in (1, 3, 5)]
     b = [int(colour_b[i:i + 2], 16) for i in (1, 3, 5)]
-    mixed = [round(x + (y - x) * amount) for x, y in zip(a, b)]
-    return "#%02x%02x%02x" % tuple(mixed)
+    red, green, blue = (round(x + (y - x) * amount) for x, y in zip(a, b, strict=True))
+    return f"#{red:02x}{green:02x}{blue:02x}"

@@ -20,13 +20,13 @@ import subprocess
 import sys
 import time
 
+# The speech model's folder name under models/, shared with the app.
+from recognizer import MODEL
+
 # The version lives in version.py, which the app reads too. It is written into
 # the .exe's resource block below and handed to the installer script.
 from version import AUTHOR as PUBLISHER
 from version import NAME, VERSION
-
-# The speech model's folder name under models/, shared with the app.
-from recognizer import MODEL
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

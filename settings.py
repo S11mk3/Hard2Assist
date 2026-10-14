@@ -53,7 +53,7 @@ def load():
     _values = dict(DEFAULTS)
 
     try:
-        with open(FILE, "r", encoding="utf-8") as f:
+        with open(FILE, encoding="utf-8") as f:
             saved = json.load(f)
     except (OSError, ValueError):
         saved = {}

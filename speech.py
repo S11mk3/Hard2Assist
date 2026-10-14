@@ -5,6 +5,7 @@ threads queue text with speak(). While something is being said, the registered
 pause hook mutes the microphone so the app does not hear its own voice.
 """
 
+import contextlib
 import queue
 import threading
 import time
@@ -97,10 +98,8 @@ def _safely(hook):
     """Run a pause/resume hook without letting an exception kill this thread."""
     if hook is None:
         return
-    try:
+    with contextlib.suppress(Exception):
         hook()
-    except Exception:
-        pass
 
 
 def _new_voice():

@@ -1,0 +1,14 @@
+# Tool settings. Dependencies are in requirements.txt and requirements-dev.txt.
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# SpeechRecognition imports aifc, which Python 3.13 dropped; it works through the standard-aifc package.
+filterwarnings = ["ignore:aifc was removed:DeprecationWarning"]

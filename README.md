@@ -50,6 +50,19 @@ python hard2assist.py --console   # the same thing in a terminal, no window
 Without the model it still runs, using Google's speech service over the internet instead,
 and says so when it starts.
 
+### Tests
+
+```
+pip install -r requirements-dev.txt
+python -m pytest           # tests
+python -m ruff check .     # lint
+```
+
+The tests check how speech becomes commands: the wake word, which command a sentence
+asks for and with what argument, misheard words, spoken numbers and dictated punctuation.
+They need no microphone, no speech model and leave your settings alone. Both run on every
+push to `master` (GitHub Actions, [`ci.yml`](.github/workflows/ci.yml)).
+
 ### Building it yourself
 
 ```
@@ -359,6 +372,9 @@ apps/
   itself.py         the app itself, so "focus yourself" has something to find
 
 models/             the speech model; not in git, fetched by build.py --fetch-model
+
+tests/              how speech becomes commands; run with pytest
+pyproject.toml      settings for pytest and ruff
 ```
 
 ---
@@ -395,3 +411,15 @@ models/             the speech model; not in git, fetched by build.py --fetch-mo
   spoken in English. The voice that answers is whichever Windows voice is installed.
 - **The installer is bigger than it used to be.** The speech model is bundled so the app
   works offline from the first launch, which adds about 139 MB before compression.
+
+---
+
+## License
+
+Hard2Assist is proprietary software. You may install and use the official release on your
+own computers. Copying, modifying or redistributing it, or its source code, needs the
+author's written permission. See [LICENSE](LICENSE).
+
+It is built on open-source components that keep their own licenses: Python, the
+[Moonshine](https://github.com/moonshine-ai/moonshine) speech model, and the libraries in
+`requirements.txt`.

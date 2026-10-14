@@ -154,10 +154,7 @@ def find_command(text, prefix, opens_with_command=None):
         sentence = re.sub(rf"^{greeting}", "", sentence, flags=re.IGNORECASE)
 
         exact = _after_prefix(sentence, prefix)
-        if exact is not None:
-            candidates = [(exact, None)]
-        else:
-            candidates = _misheard_prefix(sentence, prefix)
+        candidates = [(exact, None)] if exact is not None else _misheard_prefix(sentence, prefix)
 
         for command, heard_as in candidates:
             if command and opens_with_command(command):
