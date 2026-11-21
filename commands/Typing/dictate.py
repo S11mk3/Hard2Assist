@@ -1,12 +1,7 @@
-"""Keep typing everything you say, until you say "computer stop dictating".
+"""Type everything said, without the wake word, until "computer stop dictating".
 
-The wake word is dropped for the duration, and comes back only for the
-sentence that ends dictation -- see STOP_PHRASES. That is what `type` cannot
-offer: a wake word before every sentence is unusable for a paragraph.
-
-Listening for its own answers is safe here because this runs on the
-microphone thread, which already owns the open audio source. See
-listener.listen_once().
+It runs on the microphone thread, which owns the open microphone, so it listens through
+listener.listen_once() -- and holds that thread, so no other command is heard meanwhile.
 """
 
 import re
@@ -16,19 +11,23 @@ import session
 import settings
 import speech
 import spoken
-from output import detail, say
+from output import detail, plural, say, warn
 
 NAME = "dictate"
 TAKES_ARG = False
-ALIASES = ("dictation", "dictating", "dictates", "dictated")
+SYNONYMS = ("dictation",)
+ALIASES = ("dictating", "dictates", "dictated")
 PHRASES = ("start typing", "take a note", "take notes", "start dictating")
-HELP = "dictate      -- type everything you say until you say stop dictating"
+HELP = "dictate -- type everything you say until you say stop dictating"
 
 ABOUT = """\
 Dictate types everything you say, with no wake word needed, until you tell
 it to stop.
 It is for paragraphs; "type" is for a line. "take a note" and "start
 typing" start it too.
+It types into the app you last named -- "open notepad", then "dictate" --
+even if you click into another window meanwhile. If you haven't named one,
+it types into the window in front.
 Say "{prefix} stop dictating" to finish. That one sentence needs the wake
 word, because everything else you say is being typed. A bare "stop" is
 deliberately not enough -- it ends ordinary sentences too. Said on the end
@@ -39,31 +38,16 @@ Each line is typed as you finish saying it, and shown here rather than
 read back.\
 """
 
-# What ends dictation, said after the wake word: "computer stop dictating".
-#
-# Dictation types everything it hears, so its exit has to be something that
-# cannot turn up in what is being dictated. A bare "stop" ends ordinary
-# sentences ("the bus came to a stop"); the wake word in front is what makes
-# the phrase impossible to dictate by accident.
+# Said after the wake word to finish. The wake word is what makes them impossible to dictate by
+# accident: a bare "stop" ends ordinary sentences ("the bus came to a stop").
 STOP_PHRASES = ("stop dictating", "stop dictation", "stop typing", "stop")
 
-# Politeness allowed on either side of the phrase, so "computer please stop
-# dictating now" works. Generous, because the wake word in front is what makes
-# the whole thing a command rather than a sentence.
-FILLER = ("please", "now", "just", "can you", "could you", "would you",
-          "you", "i want you to")
+# Allowed either side of the phrase: "computer please stop dictating now".
+FILLER = ("please", "now", "just", "can you", "could you", "would you", "you", "i want you to")
 
-# How long to wait for each sentence. Longer than the main loop's timeout:
-# the user is composing rather than issuing a command, and pausing to think
-# should not be read as a pause in the dictation.
-TIMEOUT = 12
-
-# Consecutive silences before it gives up on its own.
-#
-# The escape hatch. Dictation runs on the microphone thread and holds it for
-# as long as it runs, so no other command can be heard while it does -- not
-# `stop`, not `quiet`.
-MAX_SILENCE = 3
+TIMEOUT = 12        # per sentence: pausing to think is not the end of the dictation
+PHRASE_LIMIT = 20   # a dictated sentence runs longer than a command
+MAX_SILENCE = 3     # silences in a row before it stops by itself: the way out if all else fails
 
 
 def run():
@@ -72,120 +56,64 @@ def run():
         say("Dictation needs the microphone, which isn't running.")
         return
 
-    # Where the text will land, with our own window moved aside if it was in
-    # front. Says why itself when there is nowhere sensible to type.
     target = session.keyboard_target()
     if target is None:
         return
 
-    # From settings rather than the literal word "computer", so the sentence
-    # names the phrase that actually works after `customize`.
-    say(f"Dictating into {target}. Say {settings.get('prefix')} stop dictating "
-        f"when you're done.")
-
-    # Without this the microphone opens while that sentence is still playing,
-    # and the app hears its own "say computer stop dictating" and stops.
-    speech.wait()
+    say(f"Dictating into {target}. Say {settings.get('prefix')} stop dictating when you're done.")
+    speech.wait()   # or it hears its own "say computer stop dictating", and stops
 
     typed = _listen(ears)
-
-    if typed:
-        line = "line" if typed == 1 else "lines"
-        say(f"Stopped dictating. {typed} {line} typed.")
-    else:
-        say("Stopped dictating.")
+    say(f"Stopped dictating. {plural(typed, 'line')} typed." if typed else "Stopped dictating.")
 
 
 def _stop_pattern():
-    """Matches the exit phrase where it ends an utterance.
-
-    Anchored to the end, so a line quoting the phrase mid-sentence is still
-    typed. It has to reach past the end of a sentence because one utterance is
-    not always one sentence: the recogniser groups by pauses, so a phrase said
-    straight after a line arrives joined onto it.
-
-    Built per call rather than at import, so a wake word changed through
-    `customize` takes effect on the next thing said.
-    """
-    prefix = re.escape(settings.get("prefix"))
-
-    # Longest first, or "stop" would match and leave "dictating" behind.
-    phrases = "|".join(re.escape(phrase) for phrase
-                       in sorted(STOP_PHRASES, key=len, reverse=True))
-    filler = "|".join(re.escape(word) for word
-                      in sorted(FILLER, key=len, reverse=True))
+    """The exit phrase where it ends an utterance -- which can hold the last sentence as well,
+    since the recogniser groups by pauses. Built each time, to follow a changed wake word."""
+    def either(words):
+        return "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
 
     gap = r"[\s,.!?]+"
-
     return re.compile(
-        # The wake word, alone or after a line. The separator before it is
-        # looked at rather than taken, so "home at six. Computer, stop" keeps
-        # its full stop.
-        rf"(?:^|(?<=[\s,.!?])){prefix}"
-        rf"(?:{gap}(?:{filler}))*"       # "please", "can you"
-        rf"{gap}(?:{phrases})"           # the phrase itself
-        rf"(?:{gap}(?:{filler}))*"       # "now", "please"
-        rf"[\s,.!?]*$",                  # trailing punctuation
-        re.IGNORECASE,
-    )
+        rf"(?:^|(?<=[\s,.!?])){re.escape(settings.get('prefix'))}"   # keeps the full stop before it
+        rf"(?:{gap}(?:{either(FILLER)}))*{gap}(?:{either(STOP_PHRASES)})(?:{gap}(?:{either(FILLER)}))*"
+        r"[\s,.!?]*$",
+        re.IGNORECASE)
 
 
 def _split_stop(heard):
-    """Split an utterance into what to type and whether it ends dictation.
-
-    Returns (text, stopping). The phrase said on its own types nothing; said on
-    the end of a sentence it types the sentence first, so the last thing the
-    user dictated is not lost to the words that ended the session.
-    """
+    """(text to type, whether dictation ends). A sentence said before the phrase is still typed,
+    without a comma left dangling where the phrase came off."""
     heard = heard.strip()
-
-    # A comma left dangling where the phrase came off goes too: "six,
-    # computer stop dictating" types "six", not "six,".
     trimmed = _stop_pattern().sub("", heard).rstrip(" ,").strip()
-
     return (trimmed, True) if trimmed != heard else (heard, False)
 
 
 def _listen(ears):
     """The dictation loop. Returns how many lines were typed."""
-    typed = 0
-    silences = 0
-
+    typed = silences = 0
     while True:
-        heard = ears.listen_once(timeout=TIMEOUT)
-
+        heard = ears.listen_once(timeout=TIMEOUT, phrase_limit=PHRASE_LIMIT)
         if not heard:
             silences += 1
             if silences >= MAX_SILENCE:
                 detail("(nothing heard for a while, so dictation stopped)")
                 return typed
             continue
-
         silences = 0
 
         heard, stopping = _split_stop(heard)
-
         text = spoken.prepare(heard) if heard else ""
-        if not text:
-            if stopping:
+        if text:
+            # Every line, so a click elsewhere meanwhile cannot send the rest somewhere else.
+            if session.keyboard_target() is None:
                 return typed
-            continue
-
-        # Written, never spoken: reading each line back would make it hard to
-        # keep a train of thought.
-        detail(f"  > {text}")
-
-        if not spoken.type_out(text):
-            say("Windows stopped letting me type there.")
-            return typed
-
-        # Sentences arrive one utterance at a time and would otherwise run
-        # together. Not after a line break, which is already a separator.
-        if not text.endswith("\n"):
-            spoken.type_out(" ")
-
-        typed += 1
-
-        # The stop rode in on the end of that line, which is now typed.
+            detail(f"  > {text}")   # written, never read back: that would break a train of thought
+            if not spoken.type_out(text):
+                warn("Windows stopped letting me type there.")
+                return typed
+            if not text.endswith("\n"):
+                spoken.type_out(" ")   # or one sentence runs into the next
+            typed += 1
         if stopping:
             return typed

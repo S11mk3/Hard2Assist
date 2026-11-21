@@ -6,12 +6,10 @@ from output import detail, say
 
 NAME = "status"
 TAKES_ARG = False
-ALIASES = ("stats", "statue", "system", "performance")
-
-# Names no command word, so only a phrase can reach it.
+ALIASES = ("statue",)
+SYNONYMS = ("stats", "system", "performance")
 PHRASES = ("how busy are you", "how busy is it")
-
-HELP = "status       -- how busy the CPU and memory are"
+HELP = "status -- how busy the CPU and memory are"
 
 ABOUT = """\
 Status says how busy the processor and the memory are, as percentages.
@@ -24,14 +22,9 @@ instantly, so it takes about half a second to answer.\
 
 
 def run():
-    # cpu_percent() with no interval returns the average since some arbitrary
-    # earlier call, so sample over a moment instead.
+    # Without an interval, cpu_percent() averages since some arbitrary earlier call.
     cpu = psutil.cpu_percent(interval=0.4)
     memory = psutil.virtual_memory()
-
     say(f"CPU {round(cpu)} percent, memory {round(memory.percent)} percent")
-
-    used = memory.used / (1024 ** 3)
-    total = memory.total / (1024 ** 3)
-    detail(f"  {used:.1f} of {total:.1f} GB in use, "
+    detail(f"  {memory.used / 1024 ** 3:.1f} of {memory.total / 1024 ** 3:.1f} GB in use, "
            f"{psutil.cpu_count(logical=True)} cores")

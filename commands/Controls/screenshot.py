@@ -1,16 +1,14 @@
 """Save a picture of the whole screen."""
 
 import win
-from output import say
+from output import say, warn
 
 NAME = "screenshot"
 TAKES_ARG = False
-ALIASES = ("screenshots", "capture")
-
-# What the recogniser returns when the word comes out as two.
+ALIASES = ("screenshots",)
+SYNONYMS = ("capture",)
 PHRASES = ("screen shot", "print screen", "take a screen shot")
-
-HELP = "screenshot   -- save a picture of the screen to Pictures"
+HELP = "screenshot -- save a picture of the screen to Pictures"
 
 ABOUT = """\
 Screenshot saves a picture of the whole screen.
@@ -23,8 +21,7 @@ tool" instead.\
 
 
 def run():
-    if not win.send_keys(win.VK_LWIN, win.VK_SNAPSHOT):
-        say("Windows would not take the screenshot.")
-        return
-
-    say("Saved a screenshot to your Pictures folder, under Screenshots.")
+    if win.send_keys(win.VK_LWIN, win.VK_SNAPSHOT):
+        say("Saved a screenshot to your Pictures folder, under Screenshots.")
+    else:
+        warn("Windows would not take the screenshot.")

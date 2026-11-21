@@ -1,26 +1,17 @@
-"""List what is open on screen.
-
-Also the answer to "what does 'it' mean right now": the window commands take
-"it" to mean whatever was last named, and this is how you see what is around
-to be named.
-"""
+"""List what is open on screen -- which is also what there is to call "it"."""
 
 import os
 
 import win
-from output import detail, say
+from output import detail, plural, say
 
 NAME = "windows"
 TAKES_ARG = False
-ALIASES = ("window",)
-
-# The natural phrasings name no command word at all. Safe to declare even
-# though "open" is a command: a phrase outranks a command word sitting inside
-# it, so "what's open" reaches here rather than running `open`.
-PHRASES = ("what's open", "whats open", "what is open", "what's running",
-           "whats running", "what do i have open")
-
-HELP = "windows      -- list the windows that are open ('what's open')"
+SYNONYMS = ("window",)
+# A phrase outranks the command word inside it, so "what's open" lands here, not on `open`.
+PHRASES = ("what's open", "whats open", "what is open", "what's running", "whats running",
+           "what do i have open")
+HELP = "windows -- list the windows that are open ('what's open')"
 
 ABOUT = """\
 Windows lists what is open on screen right now.
@@ -31,56 +22,37 @@ The taskbar, the desktop and my own window are left out, since none of
 them is something you opened.\
 """
 
-# Always-on shell windows that are not something the user opened and would
-# not think of as being "open". Matched on window class, which does not
-# change with the Windows display language the way a title does.
+# Shell windows nobody thinks of as open, by class, which does not change with the language.
 SHELL_CLASSES = {
-    "Progman",              # the desktop
-    "WorkerW",              # the desktop's wallpaper layer
-    "Shell_TrayWnd",        # the taskbar
-    "Windows.UI.Core.CoreWindow",   # Start menu, search, notification flyouts
-    "ApplicationFrameWindow",       # empty frames left behind by store apps
+    "Progman",                       # the desktop
+    "WorkerW",                       # the wallpaper layer
+    "Shell_TrayWnd",                 # the taskbar
+    "Windows.UI.Core.CoreWindow",    # Start, search and notification flyouts
+    "ApplicationFrameWindow",        # empty frames left behind by Store apps
 }
 
-# The log panel is comfortable at roughly this width.
 MAX_TITLE = 70
 
 
 def _listed():
-    """Titles of the windows worth telling the user about."""
-    ours = os.getpid()
-
-    found = []
+    titles = []
     for hwnd, title, class_name in win.visible_windows():
-        if class_name in SHELL_CLASSES:
-            continue
-
-        # Our own window, and any file picker or message box we put up.
-        if win.pid_of_window(hwnd) == ours:
-            continue
-
-        if title not in found:
-            found.append(title)
-
-    return found
+        # Not our own window, file picker or message box either.
+        if class_name not in SHELL_CLASSES and win.pid_of_window(hwnd) != os.getpid() and title not in titles:
+            titles.append(title)
+    return titles
 
 
 def run():
     titles = _listed()
-
     if not titles:
         say("Nothing is open apart from me.")
         return
 
-    # Spoken as a count, written as the list: reading a dozen window titles
-    # out loud takes longer than looking at them.
-    window = "window" if len(titles) == 1 else "windows"
-    say(f"{len(titles)} {window} open. They're on screen.")
-
+    # A count is quicker to hear than a dozen titles; the titles are quicker to read.
+    say(f"{plural(len(titles), 'window')} open. They're on screen.")
     detail("")
     detail(f"OPEN WINDOWS   ({len(titles)})")
     for title in titles:
-        if len(title) > MAX_TITLE:
-            title = title[:MAX_TITLE - 3] + "..."
-        detail(f"  {title}")
+        detail(f"  {title if len(title) <= MAX_TITLE else title[:MAX_TITLE - 3] + '...'}")
     detail("")

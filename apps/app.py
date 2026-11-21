@@ -7,59 +7,44 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class App:
     name: str
-    """Canonical name. Shown by `help apps` and spoken back in confirmations."""
+    """Canonical lowercase name, listed by `help apps` and spoken back in confirmations."""
 
     launch: str
-    """Passed to os.startfile(): an exe, a .msc console, a .lnk shortcut or a URL."""
+    """Passed to os.startfile(): an exe, .msc, .lnk, folder, URL or shell: address."""
 
     title: str = ""
-    """Case-insensitive substring of the window title, used to find the app once open."""
+    """Part of the window title (any case), used to find the app once it is open."""
 
     aliases: tuple = ()
-    """Other things the user might say, including recogniser misspellings."""
+    """Other things the user might say, including what the recogniser hears instead."""
 
     window_class: str = ""
-    """Win32 class name, for apps whose title is not stable (explorer shows the folder name)."""
-
-    protected: bool = False
-    """Never force-kill this. Terminating explorer.exe takes down the taskbar and desktop."""
+    """Win32 class name, for apps whose title is not stable (Explorer shows the folder name)."""
 
     process: str = ""
-    """Image name such as "obs64.exe". Known for user-picked apps, letting close
-    and kill match the process exactly instead of guessing from the window title."""
+    """Executable name such as "obs64.exe", when known (user-picked apps)."""
 
     kind: str = "system"
-    """Source: system, installed, mine, folder or web. Used only for reporting."""
+    """Source: itself, system, mine, folder, installed or web."""
 
     def matches(self, spoken):
-        """True if the spoken text is this app's name or one of its aliases."""
         spoken = spoken.lower().strip()
         return spoken == self.name or spoken in self.aliases
 
     def owns_process(self, image):
-        """Whether the given executable image belongs to this app.
+        """Whether an executable belongs to this app, for when its window titles do not match.
 
-        Used to locate windows when title matching fails. Start Menu shortcuts
-        are named for the product, not the window -- "Opera GX Browser" opens
-        a window titled "... - Opera" -- but the executable name behind the
-        window does not drift the way the title does.
-
-        For a user-picked app the real image name is known and compared
-        directly. Otherwise one of the app's words must *be* the executable
-        stem: "opera" in "opera gx browser" matches opera.exe, and "obs" in
-        "obs studio" matches obs64.exe. Only a trailing version number is
-        allowed after the word, which stops "task manager" from claiming
-        taskhostw.exe.
+        A Start Menu name like "Opera GX Browser" does not match the window "... - Opera", but
+        the executable behind it does not drift: one of the name's words must be the executable's
+        stem, optionally followed by a version number ("obs" matches obs64.exe; "task manager"
+        does not claim taskhostw.exe).
         """
         image = image.lower()
         if not image.endswith(".exe"):
             return False
-
         if self.process:
             return image == self.process.lower()
 
         stem = image[:-len(".exe")]
-        for word in re.split(r"[^a-z0-9]+", self.name.lower()):
-            if len(word) >= 3 and re.fullmatch(re.escape(word) + r"\d*", stem):
-                return True
-        return False
+        return any(len(word) >= 3 and re.fullmatch(re.escape(word) + r"\d*", stem)
+                   for word in re.split(r"[^a-z0-9]+", self.name.lower()))

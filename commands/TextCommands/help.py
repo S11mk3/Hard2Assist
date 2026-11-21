@@ -4,13 +4,9 @@
     computer help apps       everything I can open
     computer help open       what `open` does, and how to say it
 
-The explanations live in each command's own ABOUT rather than in a table
-here, so a page cannot drift out of step with the command it describes. A
-command dropped into %APPDATA% with no ABOUT still gets a page, built from
-its HELP line and its EXAMPLE.
+Each explanation is the command's own ABOUT, so it cannot drift out of step with the command. A
+command with no ABOUT still gets a page, built from its HELP line and EXAMPLE.
 """
-
-import difflib
 
 import apps
 import registry
@@ -19,16 +15,11 @@ from output import detail, say
 
 NAME = "help"
 TAKES_ARG = True
-
-# Bare `help` is the command's main use, not a mistake to be corrected.
-ARG_OPTIONAL = True
-
-ALIASES = ("commands", "hlep")
-# Only the phrasings that name no command word at all. Anything containing
-# "commands" is already reached by the alias above.
+ARG_OPTIONAL = True   # bare `help` is the main use, not a mistake
+ALIASES = ("hlep",)
+SYNONYMS = ("commands",)
 PHRASES = ("what can you do", "what do you do", "what can i say")
-
-HELP = "help         -- the commands ('help apps', or 'help <command>')"
+HELP = "help -- the commands ('help apps', or 'help <command>')"
 
 ABOUT = """\
 Help lists every command I know, and explains any one of them.
@@ -39,99 +30,65 @@ and the other ways of asking for it. Any command name works there.
 "what can you do" reaches this too.\
 """
 
-# Words that ask for the app catalogue rather than a command. Kept short and
-# checked before any command lookup, so they cannot be fuzzy-matched into
-# something else.
-APP_TOPICS = ("apps", "app", "applications", "programs", "program",
-              "everything")
+# Asking for the app list rather than a command; checked first, so never fuzzy-matched.
+APP_TOPICS = ("apps", "app", "applications", "programs", "program", "everything")
 
-# Said in front of the real topic. "help me with volume" asks about `volume`.
-TOPIC_FILLER = ("me", "with", "about", "on", "the", "a", "an", "command",
-                "using", "use", "how", "to")
+# Said in front of the topic: "help me with volume".
+TOPIC_FILLER = ("me", "with", "about", "on", "the", "a", "an", "command", "using", "use", "how", "to")
 
-# The log panel is comfortable at roughly this width.
-LINE_WIDTH = 76
+LINE_WIDTH = 76   # what the log panel shows comfortably
 
-# A name longer than this gets a line to itself instead of setting the column
-# width for every other name. Start Menu entries run to 48 characters
-# ("windows defender firewall with advanced security"), and sizing all the
-# columns to those leaves one narrow column beside a field of whitespace.
+# A longer name gets a line of its own, rather than setting the column width for all the rest
+# ("windows defender firewall with advanced security").
 MAX_WIDTH = 24
-
 GAP = "  "
-
-# How close an unknown topic must be to a command name to be offered as a
-# suggestion. Looser than the registry's own matching, since this only
-# produces advice.
-SUGGEST_CUTOFF = 0.6
 
 
 def _rows(names):
-    """Wrap names into aligned columns, the overlong ones on their own lines."""
+    """Names in aligned columns, overlong ones on lines of their own."""
     normal = [name for name in names if len(name) <= MAX_WIDTH]
-    wide = [name for name in names if len(name) > MAX_WIDTH]
-
     rows = []
-
     if normal:
         width = max(len(name) for name in normal)
         columns = max(1, (LINE_WIDTH + len(GAP)) // (width + len(GAP)))
-
         for i in range(0, len(normal), columns):
-            row = normal[i:i + columns]
-            rows.append(GAP.join(name.ljust(width) for name in row).rstrip())
-
-    rows.extend(wide)
-    return rows
+            rows.append(GAP.join(name.ljust(width) for name in normal[i:i + columns]).rstrip())
+    return rows + [name for name in names if len(name) > MAX_WIDTH]
 
 
 def _topic(argument):
-    """The command or subject an argument names, cleaned up for matching."""
-    words = argument.lower().strip().strip(" ,.?!").split()
-
+    words = argument.lower().strip(" ,.?!").split()
     while words and words[0] in TOPIC_FILLER:
         words = words[1:]
-
     while words and words[-1] in ("command", "commands"):
         words = words[:-1]
-
     return " ".join(words)
 
 
-def _summary(module):
-    """One line describing a command, for one that declares no ABOUT.
-
-    Taken from the half of its HELP line after the dashes, which is already
-    written as a description: "close an app, letting it save first".
-    """
-    text = getattr(module, "HELP", "")
-
-    if "--" in text:
-        return text.split("--", 1)[1].strip()
-
-    return f"a command called {module.NAME}"
-
-
 def _lines(module, prefix):
-    """A command's explanation, as lines. Its ABOUT, or a stand-in."""
+    """A command's explanation as lines: its ABOUT, or one built from its HELP line."""
     about = getattr(module, "ABOUT", "").strip()
-
     if not about:
-        return [f"{module.NAME.capitalize()} -- {_summary(module)}."]
-
-    # replace() rather than str.format(): an ABOUT is prose, and a stray
-    # brace in it would raise instead of printing.
+        _, dashes, description = getattr(module, "HELP", "").partition("--")
+        summary = description.strip() if dashes else f"a command called {module.NAME}"
+        return [f"{module.NAME.capitalize()} -- {summary}."]
+    # replace(), not format(): a stray brace in the prose must not raise.
     return about.replace("{prefix}", prefix).splitlines()
 
 
+def help_lines(commands):
+    """Each command's HELP line, its usage and description aligned in two columns."""
+    rows = [getattr(commands[name], "HELP", name).partition("--") for name in sorted(commands)]
+    width = max(len(usage.strip()) for usage, _, _ in rows)
+    return [f"{usage.strip().ljust(width)}  -- {text.strip()}" if dashes else usage.strip()
+            for usage, dashes, text in rows]
+
+
 def commands_page(commands, prefix):
-    """Every command, one line each."""
     detail("")
-    detail(f"COMMANDS   -- say '{prefix}' first")
-
-    for name in sorted(commands):
-        detail("  " + getattr(commands[name], "HELP", name))
-
+    detail(f"COMMANDS   -- say '{prefix}' first, or type them below")
+    for line in help_lines(commands):
+        detail("  " + line)
     detail("")
     detail("MORE")
     detail(f"  {prefix} help apps        everything I can open")
@@ -140,70 +97,40 @@ def commands_page(commands, prefix):
 
 
 def apps_page():
-    """Everything the app catalogue can open, grouped by where it came from."""
     groups = apps.names_by_kind()
-    total = sum(len(names) for _, names in groups)
-
-    say(f"I can open {total} things. They're on screen.")
-
+    say(f"I can open {sum(len(names) for _, names in groups)} things. They're on screen.")
     for label, names in groups:
         detail("")
         detail(f"{label.upper()}   ({len(names)})")
         for row in _rows(names):
             detail("  " + row)
-
     detail("")
     detail("Say the name of any of them after 'open'.")
     detail("")
 
 
 def _spoken(lines):
-    """The part of an explanation worth hearing: its first sentence.
-
-    A sentence rather than a first line, because where a line ends is only a
-    matter of how the ABOUT text happens to be wrapped in its source file.
-    """
+    """The first sentence: worth hearing, where the rest is only worth reading. A sentence, not
+    a line, since where a line breaks is only how the ABOUT happens to be wrapped."""
     text = " ".join(line.strip() for line in lines if line.strip())
-
     head, stop, _ = text.partition(". ")
-
     return head + "." if stop else text
 
 
 def command_page(module, prefix):
-    """One command, explained in full."""
     lines = _lines(module, prefix)
-
-    # Spoken short and written in full, the split `disk` and `windows` make.
     say(_spoken(lines))
 
     detail("")
     detail(module.NAME.upper())
     for line in lines:
         detail("  " + line if line else "")
-
     detail("")
     detail(f"  Say:  {registry.usage(module)}")
-
     phrases = getattr(module, "PHRASES", ())
     if phrases:
         detail(f"  Or:   {', '.join(phrases)}")
-
     detail("")
-
-
-def _unknown(commands, topic, prefix):
-    """Nothing matched. Offer the nearest command rather than the whole list."""
-    close = difflib.get_close_matches(topic, list(commands), n=1,
-                                      cutoff=SUGGEST_CUTOFF)
-
-    if close:
-        say(f"I don't have a command called {topic}. Did you mean {close[0]}? "
-            f"Say {prefix} help {close[0]}.")
-        return
-
-    say(f"I don't have a command called {topic}. "
-        f"Say {prefix} help to see them all.")
 
 
 def run(argument=""):
@@ -212,13 +139,7 @@ def run(argument=""):
     topic = _topic(argument)
 
     if not topic:
-        groups = apps.names_by_kind()
-        total = sum(len(names) for _, names in groups)
-
-        # Speak only a short summary; the full lists would be tedious to hear.
-        say(f"I know {len(commands)} commands and {total} apps. "
-            f"They're on screen.")
-
+        say(f"I know {len(commands)} commands and {sum(apps.counts().values())} apps. They're on screen.")
         commands_page(commands, prefix)
         return
 
@@ -226,13 +147,15 @@ def run(argument=""):
         apps_page()
         return
 
-    # The registry's own matching, so every way of naming a command reaches
-    # its page: `help clothes` explains `close`, and `help full screen`
+    # The registry's own matching, so `help clothes` explains `close` and `help full screen`
     # explains `fullscreen`.
-    name, _, _ = registry.understand(commands, topic)
-
-    if name is None:
-        _unknown(commands, topic, prefix)
+    name = registry.understand(topic)[0]
+    if name is not None:
+        command_page(commands[name], prefix)
         return
 
-    command_page(commands[name], prefix)
+    guess = registry.suggest(topic)
+    if guess is not None:
+        say(f"I don't have a command called {topic}. Did you mean {guess.NAME}? Say {prefix} help {guess.NAME}.")
+    else:
+        say(f"I don't have a command called {topic}. Say {prefix} help to see them all.")

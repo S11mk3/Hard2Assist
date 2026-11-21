@@ -1,8 +1,7 @@
 """Text-to-speech through the Windows SAPI voice.
 
-All speech happens on one worker thread that owns the COM voice object; other
-threads queue text with speak(). While something is being said, the registered
-pause hook mutes the microphone so the app does not hear its own voice.
+One worker thread owns the COM voice; other threads queue text with speak(). The microphone is
+paused from the moment a line is queued until the queue is empty, so the app never hears itself.
 """
 
 import contextlib
@@ -10,22 +9,25 @@ import queue
 import threading
 import time
 
+import settings
+
+# A Speak() that returns faster than this made no sound: the voice broke silently, and is
+# recreated rather than leaving the app mute for the rest of the session.
+REAL_SPEECH_SECONDS = 0.05
+
 _queue = queue.Queue()
 _thread = None
-_ready = threading.Event()
+_started = threading.Event()   # creating the voice has succeeded or failed
 _available = False
+_failed = False
 _enabled = True
 _error = ""
 
-_pause_mic = None
-_resume_mic = None
-
-# How long start() waits for the worker thread to report readiness.
-START_TIMEOUT = 15
-
-# A Speak() call returning faster than this cannot have produced audio; it is
-# treated as a silently broken voice. See _speak_once().
-REAL_SPEECH_SECONDS = 0.15
+# Queueing a line and pausing the microphone happen together, as do finding the queue empty and
+# resuming it, so a line can never be queued between the check and the resume.
+_lock = threading.Lock()
+_muting = False
+_pause_mic = _resume_mic = None
 
 
 def on_speaking(pause, resume):
@@ -35,54 +37,57 @@ def on_speaking(pause, resume):
 
 
 def start():
-    """Start the speech thread. Returns False if this PC has no working voice."""
+    """Create the voice in the background. Lines queued meanwhile are spoken once it exists."""
     global _thread
-
     if _thread is None:
-        _thread = threading.Thread(target=_run, daemon=True)
+        _thread = threading.Thread(target=_run, daemon=True, name="speech")
         _thread.start()
 
-    _ready.wait(timeout=START_TIMEOUT)
+
+def ready(timeout=15):
+    """Wait until the voice exists or has failed. True if there is one."""
+    _started.wait(timeout)
     return _available
 
 
+def started():
+    return _started.is_set()
+
+
 def available():
-    """Whether a voice could be created on this PC."""
     return _available
 
 
 def error():
-    """Description of the last speech failure. Empty when everything works."""
+    """The last speech failure, or ""."""
     return _error
 
 
 def enabled():
-    """Whether replies are currently being spoken."""
     return _enabled and _available
 
 
 def set_enabled(value):
-    """Turn speaking on or off. The `quiet` and `speak` commands call this."""
+    """Turn speaking on or off; `quiet` and `speak` call this."""
     global _enabled
     _enabled = bool(value)
 
 
 def speak(text):
-    """Queue text to be spoken. A no-op when speech is off or unavailable."""
-    if enabled() and text:
+    """Queue text to be spoken. A no-op when speech is off or impossible."""
+    global _muting
+    if not text or not _enabled or _failed or _thread is None:
+        return
+    with _lock:
         _queue.put(text)
+        if not _muting:
+            _muting = True
+            _safely(_pause_mic)
 
 
 def wait(timeout=60):
-    """Block until everything queued so far has been spoken.
-
-    The setup conversation needs this: it must finish asking a question
-    before it starts listening for the answer, or it hears itself.
-
-    Works by queueing a marker behind the text and waiting for the speech
-    thread to reach it; FIFO order means everything ahead of it is done.
-    """
-    if not enabled():
+    """Block until everything queued so far has been spoken."""
+    if not _enabled or _failed or _thread is None:
         return
     reached = threading.Event()
     _queue.put(reached)
@@ -90,98 +95,75 @@ def wait(timeout=60):
 
 
 def stop():
-    """Ask the speech thread to finish and exit."""
     _queue.put(None)
 
 
 def _safely(hook):
-    """Run a pause/resume hook without letting an exception kill this thread."""
-    if hook is None:
-        return
-    with contextlib.suppress(Exception):
-        hook()
+    if hook is not None:
+        with contextlib.suppress(Exception):
+            hook()
 
 
 def _new_voice():
-    """Create a SAPI voice object."""
+    """A SAPI voice, the one named by the `voice` setting if it is installed."""
     import comtypes.client
-    return comtypes.client.CreateObject("SAPI.SpVoice")
+    voice = comtypes.client.CreateObject("SAPI.SpVoice")
+
+    wanted = settings.get("voice").lower()
+    if wanted:
+        voices = voice.GetVoices()
+        for i in range(voices.Count):
+            if wanted in voices.Item(i).GetDescription().lower():
+                voice.Voice = voices.Item(i)
+                break
+    return voice
 
 
 def _run():
-    """Worker thread: create the COM voice and speak queued text until stopped."""
-    global _available, _error
+    """Worker thread: create the voice, then speak the queue until stop()."""
+    global _available, _failed, _error, _muting
 
+    voice = None
     try:
-        # COM must be initialised on every thread that uses it. comtypes does
-        # this on first import, but if another thread imported it first the
-        # import here is a no-op and voice creation fails with "CoInitialize
-        # has not been called".
         import comtypes
-        comtypes.CoInitialize()
+        comtypes.CoInitialize()   # needed on every thread that uses COM
         voice = _new_voice()
+        _available = True
     except Exception as e:
-        _available = False
+        _failed = True
         _error = f"{type(e).__name__}: {e}"
-        _ready.set()
-        return
+    _started.set()
 
-    _available = True
-    _ready.set()
-
-    speaking = False
-    while True:
-        item = _queue.get()
-
-        if item is None:
-            break
-
+    # A failed voice still drains the queue, so nothing waits on it forever.
+    while (item := _queue.get()) is not None:
         if isinstance(item, threading.Event):
-            # A wait() marker rather than something to say. Reaching it means
-            # every line queued ahead of it has been spoken.
-            item.set()
-        else:
-            if not speaking:
-                speaking = True
-                _safely(_pause_mic)
-
+            item.set()   # a wait() marker: everything queued before it is done
+        elif voice is not None:
             try:
                 voice = _speak_once(voice, item)
             except Exception as e:
-                # A broken voice must not crash the app, but it must not fail
-                # invisibly either; the GUI polls error() and reports it.
-                _error = f"{type(e).__name__}: {e}"
+                _error = f"{type(e).__name__}: {e}"   # the window reports it
 
-        # Resume the microphone only once the queue is empty, so a run of
-        # messages does not toggle it between each line. Outside the try
-        # above, so a failed line still un-deafens the app.
-        if speaking and _queue.empty():
-            speaking = False
-            _safely(_resume_mic)
+        with _lock:
+            if _muting and _queue.empty():
+                _muting = False
+                _safely(_resume_mic)
 
     _safely(_resume_mic)
-
-    try:
+    del voice   # released before COM is shut down on this thread
+    with contextlib.suppress(Exception):
         import comtypes
         comtypes.CoUninitialize()
-    except Exception:
-        pass
 
 
 def _speak_once(voice, text):
-    """Speak one line. Returns the voice object to use for the next line.
-
-    SAPI voices occasionally break silently: Speak() returns immediately
-    without producing audio. A call that returns too fast to have made a
-    sound gets the voice recreated and the line retried once, rather than the
-    app staying mute for the rest of the session.
-    """
-    start = time.time()
-    voice.Speak(text)
-
-    if time.time() - start >= REAL_SPEECH_SECONDS:
-        return voice
-
-    fresh = _new_voice()
-    fresh.Speak(text)
-    return fresh
+    """Speak one line. Returns the voice to use next: a fresh one if this one has gone mute."""
+    for retry in (False, True):
+        if retry:
+            voice = _new_voice()
+        voice.Rate = settings.get("voice_rate")
+        began = time.monotonic()
+        voice.Speak(text)
+        if time.monotonic() - began >= REAL_SPEECH_SECONDS:
+            break
+    return voice

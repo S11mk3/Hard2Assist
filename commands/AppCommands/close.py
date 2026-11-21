@@ -1,17 +1,16 @@
 """Ask an app to close, giving it the chance to save first."""
 
+import time
+
 import session
 import win
-from output import detail, say
+from output import detail, plural, say, warn
 
 NAME = "close"
 TAKES_ARG = True
-
-# "clothes" is what Google's recogniser returns for "close" more often than
-# not; the rest are its other frequent guesses.
+EXACT_ONLY = True
 ALIASES = ("clothes", "cloths", "clothe", "closed", "cloze", "klose")
-
-HELP = "close <app>  -- close an app, letting it save first ('close all <app>' for every one)"
+HELP = "close <app> -- close an app, letting it save first ('close all <app>' for every one)"
 EXAMPLE = "close notepad"
 
 ABOUT = """\
@@ -20,7 +19,8 @@ you to save first.
 Plain "close notepad" closes the notepad opened most recently, so closing
 one by voice leaves the one you were already working in alone. Say
 "close all notepad" to close every one of them.
-"close it" closes whatever you last named.
+"close it" closes whatever you last named. A website closes only its tab,
+not the whole browser: "close youtube".
 An app running as administrator cannot be closed this way -- Windows
 blocks it, and I say so rather than pretending. Start me as
 administrator to control those, or use "kill", which usually still works.\
@@ -28,22 +28,19 @@ administrator to control those, or use "kill", which usually still works.\
 
 
 def run(argument):
-    # "close all cmd" closes every window; plain "close cmd" closes only the
-    # most recently opened one.
-    argument, every = session.split_all(argument)
-
-    app = session.resolve(argument)
-    if app is None:
-        session.unknown(argument)
+    found = session.target(argument)
+    if found is None:
+        return
+    app, every = found
+    handles = session.windows(app, every)
+    if handles is None:
         return
 
-    handles = session.target_windows(app, every)
-    if not handles:
-        say(f"{app.name} does not seem to be open.")
+    if app.kind == "web":
+        _close_tabs(app, handles)
         return
 
-    closed = 0
-    denied = 0
+    closed = denied = 0
     for hwnd in handles:
         try:
             win.close_window(hwnd)
@@ -54,8 +51,21 @@ def run(argument):
             detail(f"Could not close a {app.name} window: {e}")
 
     if closed:
-        window = "window" if closed == 1 else "windows"
-        say(f"Closing {closed} {app.name} {window}")
-
+        say(f"Closing {plural(closed, app.name + ' window')}")
     if denied:
         session.refused(f"close {app.name}")
+
+
+def _close_tabs(app, handles):
+    """A website is a browser tab. Its window is titled after the tab in front, so bringing the
+    window forward and pressing Ctrl+W closes exactly that tab, not every tab in the window."""
+    closed = 0
+    for hwnd in handles:
+        if win.focus_window(hwnd):
+            time.sleep(session.FOCUS_SETTLE)
+            closed += win.send_keys(win.VK_CONTROL, ord("W"))
+
+    if closed:
+        say(f"Closed {plural(closed, app.name + ' tab')}")
+    if closed < len(handles):
+        warn(f"Windows wouldn't let me switch to the {app.name} tab to close it.")

@@ -1,23 +1,13 @@
-"""Websites the user can open by name.
-
-os.startfile() opens a URL exactly like a program, so websites need no
-special command: "computer open youtube" goes through the same `open` as
-everything else. Add a line here and it works.
-"""
+"""Websites the user can open by name. os.startfile() opens a URL like a program, so a line here
+is all a new site needs."""
 
 from .app import App
 
 
 def site(name, url, *aliases, title=None):
-    """One website, as an App.
-
-    The title is what lets `focus` and `close` find the tab once it is open:
-    browsers put the page title in the window title, so "youtube" is inside
-    "YouTube - Google Chrome". Pass title= when the page names itself
-    differently from what the user says.
-    """
-    return App(name, url, title=title or name, aliases=tuple(aliases),
-               kind="web")
+    """One website. Its title is how `focus` and `close` find the tab, since browsers put the
+    page's title in the window's; pass title= when the page names itself differently."""
+    return App(name, url, title=title or name, aliases=aliases, kind="web")
 
 
 SITES = [

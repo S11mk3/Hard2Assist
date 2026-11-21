@@ -1,26 +1,23 @@
 """Shared test setup.
 
-The tests run the real command modules, loaded from commands/ the way the app
-loads them, but never touch the microphone, the voice or the user's own
-settings file.
+The tests run the real command modules, loaded from commands/ the way the app loads them, but
+never touch the microphone, the voice, or the user's own settings and saved apps.
 """
 
 import pytest
 
 import registry
 import settings
+from apps import installed
 
 
 @pytest.fixture(autouse=True)
-def default_settings(tmp_path, monkeypatch):
-    """Every setting at its default, saved to a throwaway folder.
-
-    Without this a test would read %APPDATA%\\Hard2Assist\\settings.json, and
-    a wake word customised on this PC would change what the tests hear.
-    """
-    monkeypatch.setattr(settings, "USER_DIR", str(tmp_path))
+def isolated_files(tmp_path, monkeypatch):
+    """Settings at their defaults and saved apps empty, both kept in a throwaway folder."""
     monkeypatch.setattr(settings, "FILE", str(tmp_path / "settings.json"))
     monkeypatch.setattr(settings, "_values", None)
+    monkeypatch.setattr(installed, "USER_FILE", str(tmp_path / "my-apps.json"))
+    monkeypatch.setattr(installed, "_entries", None)
 
 
 @pytest.fixture(scope="session")

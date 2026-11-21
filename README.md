@@ -25,8 +25,10 @@ while its window is in focus.
 
 ### Option 1 — the installer (recommended)
 
-Download (or build, see below) `Hard2Assist-Setup.exe` and run it. It asks where to
-install, and whether you want a desktop shortcut. It does **not** ask for administrator
+Download `Hard2Assist-Setup.exe` from the
+[latest release](https://github.com/S11mk3/Hard2Assist/releases/latest) (or build it, see
+below) and run it. It asks where to install, whether you want a desktop shortcut, and
+whether Hard2Assist should start with Windows. It does **not** ask for administrator
 rights: by default it installs just for you, under `%LOCALAPPDATA%\Programs`.
 
 All you need is 🎤 **a microphone**. Speech is recognised on your PC by
@@ -39,6 +41,8 @@ the installer, so no internet connection is needed.
 > it are a paid yearly subscription from a certificate authority.
 
 ### Option 2 — run from source
+
+Needs **Python 3.13** on Windows 10 or 11.
 
 ```
 pip install -r requirements.txt
@@ -59,14 +63,15 @@ python -m ruff check .     # lint
 ```
 
 The tests check how speech becomes commands: the wake word, which command a sentence
-asks for and with what argument, misheard words, spoken numbers and dictated punctuation.
-They need no microphone, no speech model and leave your settings alone. Both run on every
-push to `master` (GitHub Actions, [`ci.yml`](.github/workflows/ci.yml)).
+asks for and with what argument, misheard words, spoken numbers, keys and punctuation,
+the answers to the setup questions, and the saved settings and apps. They need no
+microphone, no speech model and leave your own files alone. Both run on every push to
+`master` (GitHub Actions, [`ci.yml`](.github/workflows/ci.yml)).
 
 ### Building it yourself
 
 ```
-pip install -r requirements.txt
+pip install -r requirements-build.txt
 python build.py
 ```
 
@@ -83,6 +88,7 @@ python build.py --installer
 ```
 
 which writes `installer\Hard2Assist-Setup.exe`, the single file to hand to anyone else.
+The version comes from `version.py`, the only place to change it for a release.
 
 <details>
 <summary>Why a folder rather than one big .exe?</summary>
@@ -93,10 +99,8 @@ the window could appear — about **4 seconds, every time**. Antivirus heuristic
 suspicious of that shape, because writing executables into a temp folder and running them
 is what droppers do.
 
-Shipping a plain folder removes the unpacking step entirely (**~0.5 s to the window**),
-and the installer keeps the download a single file. Dropping the unused speech models
-SpeechRecognition bundles and NumPy at the same time took the app from 67 MB to 29 MB,
-before the Moonshine model was added.
+Shipping a plain folder removes the unpacking step entirely (**under a second to the
+window**), and the installer keeps the download a single file.
 
 </details>
 
@@ -110,28 +114,33 @@ you want:
 | Say this | And it |
 | --- | --- |
 | `computer open notepad` | launches an app, a program, or a website |
-| `computer open obs studio` | opens anything in your Start Menu — no setup |
+| `computer open obs studio` | opens anything in your Start Menu or from the Microsoft Store — no setup |
 | `computer open youtube` | opens the site in your browser |
 | `computer open documents` | opens a folder — `downloads`, `pictures`, `desktop`… |
 | `computer focus notepad` | brings it to the front, even if it was minimised |
 | `computer minimize it` | **"it" means whatever you last named** |
+| `computer minimize everything` | clears the screen. `show desktop` works too |
 | `computer fullscreen notepad` | fills the screen with it. "full screen" works too |
 | `computer shrink notepad` | puts it back to its normal size |
 | `computer close notepad` | closes it, letting it save first |
+| `computer close youtube` | closes just that tab, not the whole browser |
 | `computer kill notepad` | forces it to stop |
-| `computer type hello there` | types it into whatever is in front |
-| `computer press enter` | also `tab`, `escape`, `save`, `copy`, `paste`, `undo` |
+| `computer type hello there` | types it into the app you last named |
+| `computer press enter` | also `tab`, `escape`, `save`, `copy`, `paste`, `undo`, `F5`… |
+| `computer press control shift t` | any key combination, held keys first |
+| `computer new tab` | also `close tab` |
 | `computer dictate` | types everything you say, until you say **computer stop dictating** |
 | `computer what's open` | lists the windows on screen |
 | `computer time` | 🔊 *"It's 8:02 pm"* |
 | `computer date` | 🔊 *"It's Friday, August 8"* |
 | `computer battery` | 🔊 *"82 percent, charging"* |
 | `computer status` | 🔊 *"CPU 12 percent, memory 46 percent"* |
-| `computer disk` | 🔊 *"C has 58 gigabytes free"* |
+| `computer disk` | 🔊 *"C drive has 58 gigabytes free"* |
 | `computer volume 50` | sets it to exactly 50%. "fifty" works too |
-| `computer volume up` | louder. `down` and `mute` too |
+| `computer volume up` | louder by ten, and says where it ended up. `up by 20`, `down` and `mute` too |
 | `computer screenshot` | saves a picture of the screen to Pictures, under Screenshots |
 | `computer search how to cook rice` | opens the results in your browser |
+| `computer search youtube for cats` | searches one site — also wikipedia, github, reddit, maps, amazon |
 | `computer remember music player` | opens a file picker once — then `open music player` just works |
 | `computer remember website music` | saves the address you copied in the browser, under that name |
 | `computer forget music` | removes a program or website you taught it |
@@ -139,8 +148,10 @@ you want:
 | `computer help` | lists every command on screen |
 | `computer help apps` | lists everything it can open — programs, folders, websites |
 | `computer help open` | explains one command in full. Any command name works |
+| `computer quiet` | stops speaking replies. `speak` turns it back on; `speak faster` / `speak slower` |
 | `computer customize` | change the wake word and how it listens |
 | `computer stop` | quits |
+| `computer open notepad and type hello` | several commands in one sentence |
 
 Every command confirms what it did, and the log keeps the whole conversation:
 
@@ -156,15 +167,23 @@ A few things worth knowing while you use it:
   leave any single answer alone. If it mishears three times it keeps the current value,
   says so, and moves on — a bad microphone costs you a setting, never the whole app.
 
-  Your answers live in `%APPDATA%\Hard2Assist\settings.json`. Delete that file to be
-  asked again from scratch.
-
-  - **Your wake word.** Any single word of three letters or more. Pick `jarvis` and it
-    answers to `jarvis open notepad`, and to nothing else.
+  - **Your wake word.** Any single word of three letters or more that isn't one of its
+    commands. Pick `jarvis` and it answers to `jarvis open notepad`, and to nothing else.
+    "Let's use jarvis" works as an answer too.
   - **When it listens.** *Always* is hands free but the microphone is live whenever the
-    app is running. *Only when in focus* means it ignores everything until you click its
-    window — more private, but you have to click first. The window says **NOT IN FOCUS**
-    while it is deliberately ignoring you, so it never looks broken.
+    app is running. *Only when in focus* switches the microphone **off** whenever another
+    window is in front — Windows' microphone icon goes away — and back on when you click
+    its window. The window says **NOT IN FOCUS** meanwhile, so it never looks broken.
+
+- **Say just the wake word and it asks "Yes?"**, then takes the next thing you say as the
+  command — no need to say it all in one breath.
+
+- **Push to talk.** Press **Ctrl+Alt+Space** anywhere and it listens for one command, no
+  wake word needed — even under *only when in focus*, with its window in the background.
+
+- **You can type instead.** The box at the bottom of the window takes any command, with or
+  without the wake word: `open notepad`, `what time is it`. Handy in a loud room, and it
+  works with no microphone at all.
 
 - **It remembers what you just named.** Say `computer open notepad` and then **"it"**,
   **"that"** or **"this"** means notepad until you name something else:
@@ -180,41 +199,49 @@ A few things worth knowing while you use it:
   the windows each time, exactly as they do when you say the name in full. Say
   `computer what's open` to see what is around to be named.
 
-- **It can type for you.** `computer type <anything>` sends it to whatever window is in
-  front. If Hard2Assist's own window is in front — which it always is if you chose *only
-  when in focus* — it switches to the app you last named first, so `type` follows `open`
-  the way the two sound when you say them.
+- **Several commands at once.** Join them with **and** or **then**: `computer open notepad
+  and type hello`, `computer volume up then what time is it`. Each waits for the one
+  before — the next command runs once the app it opened is on screen. Text you are typing
+  or searching for is never split: `computer type salt and pepper` types all of it.
 
-  Recognition gives back plain lowercase words with no punctuation, so a few are spoken:
-  **new line**, **comma**, **period**, **question mark**. `computer type hello there comma
-  how are you question mark` types *"Hello there, how are you?"*.
+- **It can type for you.** `computer type <anything>` types it into the app you last
+  named, bringing that app to the front if you have clicked into another window since —
+  so `type` follows `open` the way the two sound when you say them. `press` and `dictate`
+  work the same way. Until you name an app, they use the window in front.
+
+  Punctuation can be said out loud: **new line**, **comma**, **period**, **question
+  mark**. `computer type hello there comma how are you question mark` types *"Hello
+  there, how are you?"*. The speech model adds punctuation of its own too; a spoken mark
+  replaces it rather than doubling up.
 
   For more than a sentence, say `computer dictate` and just talk — every sentence is typed
-  as you say it, with no wake word needed, until you say `computer stop dictating`.
+  as you say it, with no wake word needed, until you say `computer stop dictating`. Every
+  sentence goes into the app you named, even if you click elsewhere while talking.
 
 - **It talks back.** Short answers are spoken; long lists are written to the window
   instead, so `computer help` says *"I know 27 commands and 131 apps, they're on screen"*
   rather than reading all of them out. Say `computer quiet` to silence it and
   `computer speak` to turn the voice back on.
 
-- **It knows what is on your PC.** Every shortcut in your Start Menu is found at
-  startup — over a hundred programs on a typical machine — so `computer open obs studio`
-  works without any configuration. Install something new and it works next time you
-  start. Say `computer help` to see the full list:
+- **It knows what is on your PC.** Every shortcut in your Start Menu, and every app from
+  the Microsoft Store, is found at startup — over a hundred programs on a typical machine
+  — so `computer open obs studio` or `computer open sticky notes` works without any
+  configuration. Install something new and it works next time you start. Say
+  `computer help` to see the full list:
 
   <div align="center">
   <img src="docs/help.png" alt="The help command listing every command on screen" width="560">
   </div>
 
 - **If it does not know something, it asks.** Say `computer open photoshop` for a
-  program it has not found and a file picker opens. Click the program once and it is
-  remembered forever, in `%APPDATA%\Hard2Assist\my-apps.json`. (You cannot dictate
-  `C:\Program Files\...` out loud, so it does not ask you to.)
+  program it has not found and it asks whether you want to point it at the program; say
+  **yes** and a file picker opens. Click the program once and it is remembered forever, in
+  `%APPDATA%\Hard2Assist\my-apps.json`. (You cannot dictate `C:\Program Files\...` out
+  loud, so it does not ask you to.)
 
   You can also teach it up front: `computer remember music player` opens the same
-  picker without waiting for a failed `open`, and `computer remember website music`
-  saves whatever address you last copied in the browser. `computer forget music`
-  takes either back out.
+  picker straight away, and `computer remember website music` saves whatever address you
+  last copied in the browser. `computer forget music` takes either back out.
 
 - **It expects to be misheard.** Speech recognition can hear **"clothes"** when you say
   **"close"**. Commands carry a list of what they actually get misheard as, and
@@ -225,6 +252,10 @@ A few things worth knowing while you use it:
   > clothes notepad
   (heard 'clothes', taking it as 'close')
   ```
+
+  Plain synonyms — `quit` for `stop`, `show` for `focus` — just work, without a note.
+  Guessing is never used for `kill`, `close` or `stop`: a mishearing must not destroy
+  anything or quit the app, so those need their own words.
 
   App names get the same treatment: `computer open ccleaner` finds *CCleaner 7*, and
   `computer open obs` finds *OBS Studio*.
@@ -242,7 +273,9 @@ A few things worth knowing while you use it:
 
 - **`close` closes the right window.** `close cmd` closes the **most recently opened**
   cmd, so opening one by voice and closing it leaves the one you were already working
-  in alone. `close all cmd` closes every one.
+  in alone. `close all cmd` closes every one. A website closes only its tab:
+  `close youtube` brings the browser window showing it forward and closes that tab.
+  `kill` refuses websites, since it would take the whole browser down.
 
 - **It does not hear itself.** While it speaks, the microphone is off. Otherwise it
   would hear *"Closing one window"*, pick the word *close* out of it, and set off again.
@@ -253,6 +286,9 @@ A few things worth knowing while you use it:
   not leave it deaf to a quieter voice for the rest of the session. Bursts and your own
   commands are ignored in that measurement; only the room's steady level counts.
 
+- **It survives a microphone being unplugged.** It says so once, keeps checking, and
+  picks the microphone up again when it comes back — or a new one, if you plug one in.
+
 - **It listens on your PC.** Speech is turned into text by
   [Moonshine](https://github.com/moonshine-ai/moonshine) small, a 139 MB speech model
   that runs on the CPU: about 0.7 seconds per command even on a 2014 laptop, with
@@ -261,13 +297,20 @@ A few things worth knowing while you use it:
   it falls back to Google's free speech service, which needs the internet, and says so
   in the window.
 
-  To choose for yourself, set `"recognizer"` in `%APPDATA%\Hard2Assist\settings.json`:
+### Settings
 
-  | Value | Uses |
-  | --- | --- |
-  | `"auto"` | Moonshine, or Google when Moonshine is unavailable (the default) |
-  | `"local"` | Moonshine only — nothing ever goes online |
-  | `"google"` | Google only |
+Your answers live in `%APPDATA%\Hard2Assist\settings.json`. Delete that file to be asked
+again from scratch. A few settings are only in the file:
+
+| Setting | Values |
+| --- | --- |
+| `"recognizer"` | `"auto"` — Moonshine, or Google when Moonshine is unavailable (the default)<br>`"local"` — Moonshine only, nothing ever goes online<br>`"google"` — Google only |
+| `"voice"` | part of the name of a Windows voice, such as `"zira"`. Empty for the default voice |
+| `"voice_rate"` | how fast it talks, from `-10` to `10`. `speak faster` and `speak slower` change it |
+| `"hotkey"` | the push-to-talk key, such as `"ctrl+alt+space"` or `"ctrl+shift+h"`. Empty turns it off |
+
+Everything it writes and says, and any error, goes to `%APPDATA%\Hard2Assist\log.txt` —
+the first thing to look at when something goes wrong.
 
 ---
 
@@ -282,8 +325,9 @@ from output import say
 
 NAME = "greet"
 TAKES_ARG = False
-ALIASES = ("greeting", "great")   # what the recogniser might hear instead
-HELP = "greet        -- say hello"
+ALIASES = ("great",)               # what the recogniser hears instead
+SYNONYMS = ("greeting",)           # other words that mean the same
+HELP = "greet -- say hello"
 
 ABOUT = """\
 Greet says hello back.
@@ -298,15 +342,19 @@ def run():
 It is picked up on the next start and `help` lists it automatically. Use
 `TAKES_ARG = True` and `run(argument)` to receive the rest of the sentence,
 and add `ARG_OPTIONAL = True` if it should also run with nothing after it.
+`PHRASES` adds whole sentences that reach the command without naming it, and
+`EXACT_ONLY = True` keeps a command that destroys something from ever being reached
+by a guess. The full list is at the top of `registry.py`.
 
 `ABOUT` is optional — without one, `computer help greet` still answers, using
 the `HELP` line and the example. With one, that page is as long as the command
 deserves. `{prefix}` inside it becomes whatever the wake word currently is, so
 an explanation never tells someone to say a word that no longer works.
 
-**`say()` writes and speaks. `detail()` only writes.** Speaking is the default so a new
-command is never accidentally silent — reach for `detail()` only when the output is a
-list or a long explanation nobody would want read aloud.
+**`say()` writes and speaks. `warn()` does the same, highlighted, for something that
+did not work. `detail()` only writes.** Speaking is the default so a new command is
+never accidentally silent — reach for `detail()` only when the output is a list or a
+long explanation nobody would want read aloud.
 
 This works with the installed app too. Put the file in a `commands\<group>\` folder in
 either of these, then restart — no rebuild needed:
@@ -314,6 +362,9 @@ either of these, then restart — no rebuild needed:
 - `%APPDATA%\Hard2Assist\commands\` — always works, whatever folder you installed to
 - next to `Hard2Assist.exe` — only if you can write to the install folder, which you
   cannot under `Program Files`
+
+Neither is loaded while Hard2Assist runs as administrator: anyone able to drop a file
+there would otherwise have it run with administrator rights.
 
 ### An app, a website or a folder
 
@@ -344,10 +395,11 @@ listener.py         the microphone loop
 recognizer.py       what was said: Moonshine on this PC, or Google as the fallback
 speech.py           the voice
 settings.py         what the user chose, saved between runs
+storage.py          where things live, and saving JSON safely
 wizard.py           the spoken setup conversation
 registry.py         finds commands, works out which one you meant
 session.py          what you last named, so the next command can say "it"
-output.py           say() writes and speaks, detail() only writes
+output.py           say(), warn() and detail(), and the log file
 spoken.py           turning what was heard into what gets typed
 ask.py              asking you for a file mid-command
 win.py              the only Windows API code
@@ -367,13 +419,14 @@ apps/
   app.py            what an app is -- name, how to launch it, how to find its window
   system.py         built into Windows
   folders.py        Documents, Downloads and the rest, wherever Windows put them
-  installed.py      found in your Start Menu, plus ones you picked
+  installed.py      found in your Start Menu and the Store, plus ones you picked
   websites.py       sites
   itself.py         the app itself, so "focus yourself" has something to find
 
 models/             the speech model; not in git, fetched by build.py --fetch-model
 
 tests/              how speech becomes commands; run with pytest
+requirements*.txt   running from source, building, and testing
 pyproject.toml      settings for pytest and ruff
 ```
 
@@ -402,11 +455,17 @@ pyproject.toml      settings for pytest and ruff
 - **Closing Start Menu programs is best-effort.** They are found by window title, which
   does not always match the shortcut name. Programs you pick yourself are matched by
   their process and close reliably. Opening always works.
+- **Websites are found by their tab.** `close youtube` finds a browser window whose tab in
+  front is YouTube; a YouTube tab hidden behind another tab cannot be seen from outside
+  the browser.
 - **Loud rooms.** Hearing starts on loudness, so it cannot tell your voice from people
   talking or a television near the microphone. In a loud room it still hears you, but
   a recording can run on with the background in it, and a quiet voice from across the
   room can be lost under it. Speak within arm's length of the microphone there, and
-  a headset works best.
+  a headset works best — or use push to talk, or type.
+- **Spoken punctuation can be misheard.** The speech model sometimes hears "comma" as
+  "corner" or "question mark" as "question number", and those are typed as words. It
+  punctuates sentences by itself from how you say them, so the words are rarely needed.
 - **English only.** The speech model is Moonshine's English one, so commands have to be
   spoken in English. The voice that answers is whichever Windows voice is installed.
 - **The installer is bigger than it used to be.** The speech model is bundled so the app
@@ -417,8 +476,9 @@ pyproject.toml      settings for pytest and ruff
 ## License
 
 Hard2Assist is proprietary software. You may install and use the official release on your
-own computers. Copying, modifying or redistributing it, or its source code, needs the
-author's written permission. See [LICENSE](LICENSE).
+own computers, and add your own command files to your installation for your personal use.
+Copying, modifying or redistributing it, or its source code, needs the author's written
+permission. See [LICENSE](LICENSE).
 
 It is built on open-source components that keep their own licenses: Python, the
 [Moonshine](https://github.com/moonshine-ai/moonshine) speech model, and the libraries in

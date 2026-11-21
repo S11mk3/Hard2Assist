@@ -5,12 +5,13 @@ import psutil
 import session
 import settings
 import win
-from output import detail, say
+from output import detail, plural, say, warn
 
 NAME = "kill"
 TAKES_ARG = True
+EXACT_ONLY = True
 ALIASES = ("kil", "keel", "killed")
-HELP = "kill <app>   -- force an app to stop, without saving ('kill all <app>' for every one)"
+HELP = "kill <app> -- force an app to stop, without saving ('kill all <app>' for every one)"
 EXAMPLE = "kill notepad"
 
 ABOUT = """\
@@ -19,54 +20,55 @@ It is what to use when an app has stopped responding, or when "close" is
 refused. Anything unsaved in it is lost, so try "close" first.
 Plain "kill notepad" stops the one opened most recently; "kill all
 notepad" stops every one.
-I refuse to kill the Windows shell, because that would take the taskbar
-and the desktop with it.\
+I refuse to kill a website, which would take your whole browser with it,
+or anything whose window belongs to the Windows shell or to the process
+that hosts Store apps, which would take the others down too.\
 """
+
+# Processes holding windows for many apps at once, and what killing one would take with it.
+SHARED_HOSTS = {
+    "explorer.exe": "the taskbar and the desktop",
+    "applicationframehost.exe": "every other Store app that is open",
+}
 
 
 def run(argument):
-    # "kill all cmd" targets every window; plain "kill cmd" targets only the
-    # most recently opened one.
-    argument, every = session.split_all(argument)
+    found = session.target(argument)
+    if found is None:
+        return
+    app, every = found
+    prefix = settings.get("prefix")
 
-    app = session.resolve(argument)
-    if app is None:
-        session.unknown(argument)
+    if app.kind == "itself":
+        say("I won't kill myself.")
+        detail(f"Say '{prefix} stop' to shut me down properly.")
+        return
+    if app.kind == "web":
+        say(f"I won't kill {app.name}.")
+        detail(f"It's a tab in your browser, and killing it would close the whole browser. "
+               f"Say '{prefix} close {app.name}' to close just the tab.")
         return
 
-    if app.protected:
-        if app.kind == "itself":
-            say("I won't kill myself.")
-            detail(f"Say '{settings.get('prefix')} stop' to shut me down "
-                   "properly.")
-            return
-
-        say(f"I won't kill {app.name}")
-        detail(f"It is the Windows shell, and killing it would take the "
-               f"taskbar and desktop with it. Try "
-               f"'{settings.get('prefix')} close {app.name}' instead.")
+    handles = session.windows(app, every)
+    if handles is None:
         return
-
-    handles = session.target_windows(app, every)
-    if not handles:
-        say(f"{app.name} does not seem to be open.")
-        return
-
-    # Several windows can belong to one process, so deduplicate the process
-    # ids first and terminate each process once.
-    pids = {win.pid_of_window(hwnd) for hwnd in handles}
 
     killed = 0
-    for pid in pids:
+    for pid in {win.pid_of_window(hwnd) for hwnd in handles}:   # one process can own many windows
         try:
-            psutil.Process(pid).terminate()
+            process = psutil.Process(pid)
+            shared = SHARED_HOSTS.get(process.name().lower())
+            if shared:
+                say(f"I won't kill {app.name}.")
+                detail(f"Its window belongs to {process.name()}, and killing that would take {shared} "
+                       f"with it. Try '{prefix} close {app.name}' instead.")
+                continue
+            process.terminate()
             killed += 1
         except psutil.NoSuchProcess:
-            pass  # already gone
+            pass
         except psutil.AccessDenied:
-            detail(f"Not allowed to kill {app.name} (pid {pid}). "
-                   f"It may need an administrator.")
+            warn(f"Not allowed to kill {app.name}. It may need an administrator.")
 
     if killed:
-        process = "process" if killed == 1 else "processes"
-        say(f"Killed {killed} {app.name} {process}")
+        say(f"Killed {plural(killed, app.name + ' process')}")

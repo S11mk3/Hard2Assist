@@ -1,10 +1,13 @@
-"""Turning spoken words into what commands act on: numbers, punctuation, "all", ending dictation."""
+"""Turning spoken words into what commands act on: numbers, punctuation, keys, sites, "all",
+ending dictation."""
 
 import pytest
 
+import output
 import session
 import settings
 import spoken
+import win
 
 
 @pytest.mark.parametrize("words, number", [
@@ -28,9 +31,14 @@ def test_volume_numbers(commands, words, number):
 @pytest.mark.parametrize("heard, text", [
     ("hello there comma how are you", "Hello there, how are you"),
     ("is it ready question mark", "Is it ready?"),
-    ("first line new line second line", "First line\nsecond line"),
+    ("first line new line second line", "First line\nSecond line"),
+    ("it is ready period see you soon exclamation mark", "It is ready. See you soon!"),
     # Whole words only.
     ("the commas were periodic", "The commas were periodic"),
+    # The offline recogniser adds punctuation of its own around a spoken mark.
+    ("Hello there, comma, how are you? Question mark.", "Hello there, how are you?"),
+    ("Hello there comma, how are you question mark?", "Hello there, how are you?"),
+    ("First line. New line. Second line.", "First line.\nSecond line."),
 ])
 def test_dictated_punctuation(heard, text):
     assert spoken.prepare(heard) == text
@@ -65,6 +73,47 @@ def test_ending_dictation_follows_a_customised_wake_word(commands):
 ])
 def test_all_applies_a_window_command_to_every_window(argument, result):
     assert session.split_all(argument) == result
+
+
+@pytest.mark.parametrize("spoken_keys, keys", [
+    ("enter", (win.VK_RETURN,)),
+    ("enter key", (win.VK_RETURN,)),
+    ("save", (win.VK_CONTROL, ord("S"))),
+    ("control shift t", (win.VK_CONTROL, 0x10, ord("T"))),
+    ("ctrl+shift+t", (win.VK_CONTROL, 0x10, ord("T"))),
+    ("alt f4", (0x12, 0x73)),
+    ("f 5", (0x74,)),
+    ("page down", (0x22,)),
+    ("windows", (win.VK_LWIN,)),
+    ("banana", None),
+    ("control banana", None),
+    ("", None),
+])
+def test_press_keys(commands, spoken_keys, keys):
+    assert commands["press"].keys_for(spoken_keys) == keys
+
+
+@pytest.mark.parametrize("argument, site, query", [
+    ("how to cook rice", None, "how to cook rice"),
+    ("for cats", None, "cats"),
+    ("YouTube for cats.", "youtube", "cats"),
+    ("youtube lofi music", "youtube", "lofi music"),
+    ("for cats on wikipedia", "wikipedia", "cats"),
+    ("google maps for coffee near me", "google maps", "coffee near me"),
+])
+def test_search_names_a_site(commands, argument, site, query):
+    _, found_query, found_site = commands["search"].where(argument)
+    assert (found_site, found_query) == (site, query)
+
+
+@pytest.mark.parametrize("count, noun, text", [
+    (1, "window", "1 window"),
+    (2, "notepad window", "2 notepad windows"),
+    (3, "process", "3 processes"),
+    (0, "line", "0 lines"),
+])
+def test_plurals(count, noun, text):
+    assert output.plural(count, noun) == text
 
 
 @pytest.mark.parametrize("word, valid", [

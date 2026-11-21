@@ -1,462 +1,121 @@
-"""Command discovery and dispatch.
+"""Finding the commands, and working out which one a sentence asks for.
 
-A command module is any .py file under commands/<group>/ that defines:
+A command is any .py file under commands/<group>/ (names starting "_" are skipped) defining:
 
-    NAME      -- the word the user says
-    TAKES_ARG -- True if the rest of the sentence is passed to run()
-    ARG_OPTIONAL -- optional; with TAKES_ARG, lets the command run with
-                 nothing after it, receiving "". For commands that are
-                 useful either way: `help` lists everything, `help open`
-                 explains one command.
-    HELP      -- one line shown by the `help` command
-    ABOUT     -- optional; the fuller explanation `help <command>` shows.
-                 Its first sentence is spoken, so write one that stands on
-                 its own; the rest is only written. "{prefix}" anywhere in
-                 the text becomes the live wake word.
-    ALIASES   -- optional; single words the recogniser commonly returns
-                 instead. Single words only: they are matched a word at a
-                 time, so a multi-word alias could never match.
-    VERBATIM  -- optional; with TAKES_ARG, the argument is handed over
-                 exactly as spoken. For commands that treat the words as
-                 text rather than meaning (`type`, `search`), where
-                 stripping "the" from "type the quick brown fox" would
-                 change what gets typed.
-    PHRASES   -- optional; whole spoken sentences that name no command word
-                 at all, such as "what can you do" for `help`.
-    EXAMPLE   -- optional; a sample argument, spoken back when the user needs
-                 to be told how the command is used.
-    run()     -- run(arg) if TAKES_ARG, otherwise run()
+    NAME          the word the user says
+    TAKES_ARG     True if the rest of the sentence is passed to run()
+    HELP          its line in `help`: "usage -- what it does"
+    run()         run(argument) if TAKES_ARG, else run()
 
-Commands are registered by their presence on disk: adding one means dropping
-a file into the folder, with no central list to update. Files whose name
-starts with an underscore are skipped.
+and optionally:
 
-Code shared between commands lives at the top level (session.py, spoken.py):
-commands are loaded by path, so a command cannot import a file beside it.
+    ARG_OPTIONAL  with TAKES_ARG, it also runs with nothing after it, receiving ""
+    ALIASES       single words the recogniser returns instead of NAME; reported as corrections
+    SYNONYMS      single words meaning the same as NAME; matched without comment
+    PHRASES       sentences naming no command word ("what can you do"); a dict maps each phrase
+                  to the argument it implies ({"new tab": "new tab"})
+    VERBATIM      the argument is text, passed exactly as heard (`type`, `search`)
+    EXACT_ONLY    never reached by guessing at a misheard first word (`kill`, `close`, `stop`)
+    EXAMPLE       a sample use, spoken back when the user needs telling how
+    settle()      called before the next command in a chain runs: `open` waits for its window
+    ABOUT         what `help <command>` shows; its first sentence is spoken, and "{prefix}"
+                  becomes the live wake word
+
+Commands are loaded by path, so code they share lives at the top level (session.py, spoken.py).
 """
 
 import difflib
 import glob
 import importlib.util
 import os
+import re
 import sys
 
 import apps
 import settings
-from output import detail, say
+import storage
+import win
+from output import detail, log, say, warn
 
-# Sentinel a command returns to request shutdown. Only `stop` uses it.
+# Returned by a command to quit the app. Only `stop` does.
 STOP = object()
 
-# Words that only glue a sentence together. Stripped from the front of an
-# argument, so "set the volume to fifty" hands `volume` the same "fifty" that
-# "volume fifty" does. Short by necessity: "up", "all" and "my" carry meaning
-# to one command or another.
+# Glue taken off the front of an argument: "set the volume to fifty" gives `volume` "fifty".
+# Short, because "up", "all" and "my" mean something to one command or another.
 ARG_FILLER = ("to", "the", "a", "an", "at", "on", "of", "is", "for")
 
-# Politeness on the end of an argument: "open notepad, please" names notepad,
-# not an app called "notepad please".
+# Politeness off the end: "open notepad, please" names notepad.
 TRAILING_FILLER = ("please", "now")
 
-# Words that introduce a command without belonging to it. Stripped from the
-# front of an argument spoken *before* the command word, so "turn up the
-# volume" reaches `volume` with "up", as "volume up" does.
-LEAD_WORDS = ("turn", "set", "put", "make", "change", "adjust", "please",
-              "can", "could", "would", "you", "i", "just", "want", "let",
-              "lets", "let's")
+# Words introducing a command without belonging to it, taken off an argument spoken *before* the
+# command word: "turn up the volume" gives `volume` "up".
+LEAD_WORDS = ("turn", "set", "put", "make", "change", "adjust", "please", "can", "could", "would",
+              "you", "i", "just", "want", "let", "lets", "let's")
 
-# Punctuation a recogniser attaches to words -- "Notepad," "open?" "50." --
-# taken off each end before matching. Apostrophes stay: "what's" is a word.
+# What may come before a command word when the wake word was only a guess; see opens_with_command().
+OPENERS = frozenset(LEAD_WORDS + ARG_FILLER + ("what", "what's", "whats", "how", "much", "tell", "me"))
+
+# Taken off each end of a word before matching -- "Notepad," "50." -- but apostrophes stay.
 PUNCTUATION = ",.?!;:\"()"
 
-# How close the first word must be to a command name before it is taken *as*
-# that command and run.
+# How close a misheard first word must be to a command name to be run as it.
 MATCH_CUTOFF = 0.75
-
-# How close a word must be before it is offered as a suggestion. Looser than
-# MATCH_CUTOFF, because this only produces advice the user can ignore.
+# How close any word must be to be offered as "did you mean"; looser, since it is only advice.
 SUGGEST_CUTOFF = 0.7
 
-# Words a command can follow and still be the first thing asked for: "can you
-# open notepad", "what's the time", "tell me the battery". See
-# opens_with_command().
-OPENERS = frozenset(LEAD_WORDS + ARG_FILLER
-                    + ("what", "what's", "whats", "how", "much", "tell", "me"))
+# Words joining two commands in one sentence: "open notepad and type hello".
+CHAIN_WORDS = ("and", "then")
+
+_commands = None
+_aliases = {}   # word -> (command name, reported as a correction)
+_phrases = []   # (words, command name, implied argument), longest first
 
 
 def _roots():
-    """Directories that may contain a commands/ folder.
+    """Folders holding a commands/ folder.
 
-    One when running from source. Three in the built .exe: the PyInstaller
-    bundle (sys._MEIPASS, where the shipped commands are unpacked), the
-    directory beside the .exe, and the user's own folder in %APPDATA%.
-
-    %APPDATA% is there because an install folder is not always writable --
-    under Program Files it is not -- so dropping in a new command works
-    wherever the app was installed.
+    The built app also loads commands dropped beside the .exe or into %APPDATA%\\Hard2Assist --
+    unless it is running as administrator, since anything placed in those user-writable folders
+    would then run with administrator rights.
     """
-    if getattr(sys, "frozen", False):
-        return [
-            sys._MEIPASS,
-            os.path.dirname(sys.executable),
-            settings.USER_DIR,
-        ]
-    return [os.path.dirname(os.path.abspath(__file__))]
-
-
-_loaded = None
-_aliases = {}
-_phrases = []
+    if not storage.FROZEN:
+        return [storage.BUNDLE_DIR]
+    if win.is_elevated():
+        detail("(Running as administrator, so commands added outside the install were not loaded.)")
+        return [storage.BUNDLE_DIR]
+    return [storage.BUNDLE_DIR, storage.EXE_DIR, storage.USER_DIR]
 
 
 def load():
-    """Import every command module. Returns {name: module}, cached."""
-    global _loaded
-    if _loaded is not None:
-        return _loaded
+    """Import every command, once. Returns {name: module}."""
+    global _commands
+    if _commands is not None:
+        return _commands
 
     commands = {}
-
-    for root in _roots():
-        pattern = os.path.join(root, "commands", "*", "*.py")
-
-        for path in sorted(glob.glob(pattern)):
+    for index, root in enumerate(_roots()):
+        for path in sorted(glob.glob(os.path.join(root, "commands", "*", "*.py"))):
             if os.path.basename(path).startswith("_"):
                 continue
-
-            module = _import_file(path)
+            module = _import(path, index)
             if module is None:
                 continue
-
             if not hasattr(module, "NAME") or not hasattr(module, "run"):
                 detail(f"Skipping {os.path.basename(path)}: it needs a NAME and a run()")
                 continue
+            # The first root wins: a file beside the .exe never replaces a bundled command.
+            commands.setdefault(module.NAME.lower(), module)
 
-            name = module.NAME.lower()
-            if name in commands:
-                # First root wins: a command beside the .exe never overrides
-                # a bundled one of the same name.
-                continue
-
-            commands[name] = module
-
-    _loaded = commands
-    _build_aliases(commands)
-    _build_phrases(commands)
+    _commands = commands
+    _index(commands)
     return commands
 
 
-def _build_aliases(commands):
-    """Map each declared alias onto its command.
-
-    Aliases absorb consistent recognition errors: Google's recogniser, the
-    fallback, returns "clothes" for "close" more often than not.
-    """
-    global _aliases
-    _aliases = {}
-
-    for name, module in commands.items():
-        for alias in getattr(module, "ALIASES", ()):
-            alias = alias.lower()
-            # A real command name always takes priority over an alias.
-            if alias not in commands:
-                _aliases.setdefault(alias, name)
-
-
-def _build_phrases(commands):
-    """Index the whole sentences commands declare in PHRASES.
-
-    Longest phrase first, so a specific phrase is preferred over a shorter
-    one that happens to be part of it.
-    """
-    global _phrases
-
-    found = []
-    for name, module in commands.items():
-        for phrase in getattr(module, "PHRASES", ()):
-            found.append((tuple(phrase.lower().split()), name))
-
-    _phrases = sorted(found, key=lambda entry: len(entry[0]), reverse=True)
-
-
-def _scan(commands, words):
-    """Find a command named anywhere in the sentence, not just at the front.
-
-    This is what lets the app be spoken to in sentences: "what time is it"
-    and "can you open notepad" reach the same commands as "time" and "open
-    notepad".
-
-    Real names are searched across the whole sentence before any alias, so
-    "can you show me the time" reaches `time` rather than being caught by
-    "show", which `focus` declares as an alias.
-
-    Returns (index of the command word, name, exact), or (None, None, False).
-    `exact` says whether the word was a real command name rather than an
-    alias; understand() weighs the two differently against a phrase.
-    """
-    for i, word in enumerate(words):
-        if word in commands:
-            return i, word, True
-
-    for i, word in enumerate(words):
-        if word in _aliases:
-            return i, _aliases[word], False
-
-    return None, None, False
-
-
-def _phrase(words):
-    """Find a declared PHRASES sentence inside the utterance.
-
-    Returns (where the phrase starts, where it ends, name), or
-    (None, None, None). The start lets understand() tell whether a command
-    word was spoken before the phrase or inside it.
-    """
-    for phrase, name in _phrases:
-        length = len(phrase)
-        for i in range(len(words) - length + 1):
-            if tuple(words[i:i + length]) == phrase:
-                return i, i + length, name
-
-    return None, None, None
-
-
-def _tokens(utterance):
-    """The utterance as (words, spoken): words to match, and words as heard.
-
-    The offline recogniser capitalises and punctuates -- "What's open?",
-    "Open Notepad, please." -- while command names, aliases and phrases are
-    bare lowercase words. `words` is the lowercased copy with punctuation
-    taken off each end, which everything is matched against. `spoken` keeps
-    each word as heard, for a VERBATIM command's text. The two lists stay the
-    same length, word for word.
-    """
-    words, spoken = [], []
-
-    for token in utterance.split():
-        word = token.lower().replace("\u2019", "'").strip(PUNCTUATION)
-        if word:
-            words.append(word)
-            spoken.append(token)
-
-    return words, spoken
-
-
-def _argument(words, spoken, verbatim=False):
-    """The words after a command word, as the argument the command expects.
-
-    A VERBATIM command gets them as heard, with every word, capital and comma:
-    filler is only glue when the argument names a thing, not when the
-    argument *is* the text. Anything else gets the cleaned-up words.
-    """
-    if verbatim:
-        return " ".join(spoken).strip()
-
-    while words and words[0] in ARG_FILLER:
-        words = words[1:]
-
-    while words and words[-1] in TRAILING_FILLER:
-        words = words[:-1]
-
-    return " ".join(words).strip()
-
-
-def _before(words):
-    """An argument spoken in front of the command word: "mute the volume".
-
-    Limited to a word or two. Anything longer is a sentence that merely ended
-    on a command word, and guessing an argument out of it produces a worse
-    reply than admitting the command needs one.
-    """
-    while words and words[-1] in ARG_FILLER:
-        words = words[:-1]
-
-    while words and words[0] in LEAD_WORDS:
-        words = words[1:]
-
-    if not words or len(words) > 2:
-        return ""
-
-    return " ".join(words)
-
-
-def understand(commands, utterance):
-    """Work out which command an utterance asks for, and with what argument.
-
-    Returns (name, argument, corrected_from), where corrected_from is the
-    word that was corrected when a guess was involved and None when the match
-    was exact. Returns (None, None, None) when nothing matches.
-
-    Tried in order, most specific first:
-
-        1. a declared PHRASES sentence       "what can you do"
-        2. a command word anywhere           "what time is it", "open notepad"
-        3. the first word nearly names one   "tim" -> "time"
-
-    Phrases are tested before single words, because a phrase can contain a
-    command word that means something else in context: "stop talking" asks
-    for `quiet`, and matching the word "stop" first would quit the app.
-
-    The exception is a real command name spoken *before* the phrase, which
-    keeps the sentence and takes the phrase as part of its argument -- "help
-    full screen" is a question about `fullscreen`, and "type stop talking"
-    types the words. Only exact names count for that, never aliases: aliases
-    are loose enough ("show", "hide", "space", "voice") that "show me what's
-    open" would stop meaning `windows`.
-
-    Fuzzy matching stays last and stays limited to the first word. Running it
-    over every word turns ordinary filler into a command often enough to be
-    worse than not matching at all.
-    """
-    words, spoken = _tokens(utterance)
-    if not words:
-        return None, None, None
-
-    start, after, phrase_name = _phrase(words)
-    index, name, exact = _scan(commands, words)
-
-    # 1: a declared sentence, which outranks any single word inside it --
-    #    unless a command was named ahead of it. A phrase starting level with
-    #    the command word still wins, which keeps "stop talking" meaning
-    #    `quiet` and "close yourself" meaning `stop`.
-    if phrase_name is not None and not (exact and index < start):
-        # Nothing to report as corrected: the phrase matched word for word.
-        verbatim = getattr(commands[phrase_name], "VERBATIM", False)
-        argument = _argument(words[after:], spoken[after:], verbatim)
-        return phrase_name, argument, None
-
-    # 2: a command word somewhere in the sentence.
-    if name is not None:
-        verbatim = getattr(commands[name], "VERBATIM", False)
-        corrected = words[index] if words[index] != name else None
-        argument = _argument(words[index + 1:], spoken[index + 1:], verbatim)
-
-        # Only when nothing followed the command word, so "volume up" and
-        # "turn the volume up" both take their argument from the right. A
-        # verbatim command never takes its text from in front of itself.
-        if not argument and not verbatim:
-            argument = _before(words[:index])
-
-        return name, argument, corrected
-
-    # 3: the first word, mangled by the recogniser.
-    close = difflib.get_close_matches(words[0], list(commands), n=1,
-                                      cutoff=MATCH_CUTOFF)
-    if close:
-        verbatim = getattr(commands[close[0]], "VERBATIM", False)
-        return close[0], _argument(words[1:], spoken[1:], verbatim), words[0]
-
-    return None, None, None
-
-
-def opens_with_command(commands, utterance):
-    """Whether an utterance starts the way a command does.
-
-    For the listener, when the wake word was a guess: misheard, or found
-    after the start of what was heard. understand() takes a command word from
-    anywhere in a sentence, which is right after a clear wake word and far
-    too loose after a doubtful one -- "commuter traffic made me lose track of
-    time" would answer with the time. Here a command name, alias or phrase
-    has to come first, after nothing but OPENERS.
-    """
-    words = _tokens(utterance)[0]
-
-    for i, word in enumerate(words):
-        for phrase, _name in _phrases:
-            if tuple(words[i:i + len(phrase)]) == phrase:
-                return True
-
-        if word in commands or word in _aliases:
-            return True
-
-        if word not in OPENERS:
-            return False
-
-    return False
-
-
-def usage(module):
-    """How to say this command, phrased to be read back to the user.
-
-    Built from EXAMPLE and the live wake word, so the advice is a sentence
-    the user can repeat and stays right after `customize` changes the word.
-    """
-    example = getattr(module, "EXAMPLE", "") or module.NAME
-
-    return f"{settings.get('prefix')} {example}"
-
-
-def _suggest(commands, utterance):
-    """The command an unrecognised utterance most likely meant, or None.
-
-    Every word is tried, because the command word is not necessarily the
-    first one in a spoken sentence.
-
-    Matched against command names only, never aliases: aliases are short and
-    odd enough ("switch", "ope", "folks") that scoring ordinary words against
-    them suggests nonsense -- "make me a sandwich" scores 0.86 against
-    `focus`'s "switch".
-    """
-    for word in _tokens(utterance)[0]:
-        if len(word) < 3:
-            continue
-
-        close = difflib.get_close_matches(word, list(commands), n=1,
-                                          cutoff=SUGGEST_CUTOFF)
-        if close:
-            return commands[close[0]]
-
-    return None
-
-
-def _report_unknown(commands, utterance):
-    """Tell the user what to say instead, rather than sending them to `help`.
-
-    A list of every command is no use to someone who has just been
-    misunderstood once; the useful answer is the one command they probably
-    wanted and the exact words that would have worked.
-    """
-    module = _suggest(commands, utterance)
-
-    if module is not None:
-        say(f"I don't know '{utterance}'. Did you mean {module.NAME}? "
-            f"Say {usage(module)}.")
-        return
-
-    # No command is close, but the utterance may name an app on its own --
-    # "computer settings" or "computer notepad" -- said without a verb.
-    app = apps.find(" ".join(_tokens(utterance)[0]))
-    if app is not None:
-        say(f"I don't know '{utterance}'. If you meant the app, say "
-            f"{settings.get('prefix')} open {app.name}.")
-        return
-
-    # Nothing close. Examples are built from the loaded commands, so they
-    # cannot drift out of step with what is available.
-    examples = [usage(commands[name]) for name in ("open", "time")
-                if name in commands]
-
-    if examples:
-        say(f"I don't know '{utterance}'. You can say things like "
-            f"{examples[0]}.")
-        if len(examples) > 1:
-            detail(f"Or: {', or '.join(examples[1:])}.")
-        return
-
-    say(f"I don't know '{utterance}'.")
-
-
-def _import_file(path):
-    """Load a single .py file as a module, by path.
-
-    By path rather than through a `commands` package, which is what lets the
-    built .exe pick up command files dropped in beside it: a package is bound
-    to the folder it was first imported from.
-    """
-    # The module name includes the full path, so that same-named files in
-    # different groups do not collide in sys.modules.
-    unique = "h2a_command_" + path.replace(os.sep, "_").replace(":", "").lstrip("_")
-
+def _import(path, root_index):
+    """Load one file as a module, by path. A `commands` package would be bound to one folder."""
+    group = os.path.basename(os.path.dirname(path))
+    stem = os.path.splitext(os.path.basename(path))[0]
+    unique = re.sub(r"\W", "_", f"h2a_command_{root_index}_{group}_{stem}")
     try:
         spec = importlib.util.spec_from_file_location(unique, path)
         module = importlib.util.module_from_spec(spec)
@@ -464,42 +123,264 @@ def _import_file(path):
         spec.loader.exec_module(module)
         return module
     except Exception as e:
-        detail(f"Could not load {os.path.basename(path)}: {e}")
         sys.modules.pop(unique, None)
+        log.exception("Could not load %s", path)
+        detail(f"Could not load {os.path.basename(path)}: {e}")
         return None
 
 
-def dispatch(commands, utterance):
-    """Run the command an utterance asks for.
+def _index(commands):
+    global _aliases, _phrases
+    _aliases, _phrases = {}, []
 
-    The command word may sit anywhere in the sentence, and everything after
-    it becomes the argument. See understand().
+    for name, module in commands.items():
+        for words, reported in ((getattr(module, "ALIASES", ()), True), (getattr(module, "SYNONYMS", ()), False)):
+            for word in words:
+                if word.lower() not in commands:   # a real command name outranks an alias
+                    _aliases.setdefault(word.lower(), (name, reported))
+
+        phrases = getattr(module, "PHRASES", ())
+        for phrase, implied in (phrases.items() if isinstance(phrases, dict) else dict.fromkeys(phrases, "").items()):
+            _phrases.append((tuple(phrase.lower().split()), name, implied))
+
+    # Longest first, so a specific phrase beats a shorter one inside it.
+    _phrases.sort(key=lambda entry: len(entry[0]), reverse=True)
+
+
+def command_words():
+    """Every command name, alias and synonym."""
+    load()
+    return set(_commands) | set(_aliases)
+
+
+def _clean(token):
+    return token.lower().replace("’", "'").strip(PUNCTUATION)
+
+
+def _tokens(utterance):
+    """(words, spoken): lowercase and trimmed of punctuation to match, and as heard for a VERBATIM
+    argument. The offline recogniser capitalises and punctuates. Same length, word for word."""
+    words, spoken = [], []
+    for token in utterance.split():
+        word = _clean(token)
+        if word:
+            words.append(word)
+            spoken.append(token)
+    return words, spoken
+
+
+def _verbatim(name):
+    return getattr(_commands[name], "VERBATIM", False)
+
+
+def _argument(words, spoken, verbatim):
+    """The words after a command word as its argument: as heard for a VERBATIM command, otherwise
+    without the glue around them."""
+    if verbatim:
+        return " ".join(spoken).strip()
+    while words and words[0] in ARG_FILLER:
+        words = words[1:]
+    while words and words[-1] in TRAILING_FILLER:
+        words = words[:-1]
+    return " ".join(words)
+
+
+def _before(words):
+    """An argument spoken before the command word ("mute the volume"). A word or two at most:
+    anything longer is a sentence that happened to end on a command word."""
+    while words and words[-1] in ARG_FILLER:
+        words = words[:-1]
+    while words and words[0] in LEAD_WORDS:
+        words = words[1:]
+    return " ".join(words) if 0 < len(words) <= 2 else ""
+
+
+def _scan(words):
+    """(index, name, exact) of the command named in a sentence, or (None, None, False).
+
+    Real names are looked for across the whole sentence before any alias, so "can you show me
+    the time" reaches `time` rather than `focus`, whose synonym "show" comes first.
     """
+    for i, word in enumerate(words):
+        if word in _commands:
+            return i, word, True
+    for i, word in enumerate(words):
+        if word in _aliases:
+            return i, _aliases[word][0], False
+    return None, None, False
+
+
+def _phrase(words):
+    """(start, end, name, implied argument) of a declared phrase in the sentence, or Nones."""
+    for phrase, name, implied in _phrases:
+        for i in range(len(words) - len(phrase) + 1):
+            if tuple(words[i:i + len(phrase)]) == phrase:
+                return i, i + len(phrase), name, implied
+    return None, None, None, None
+
+
+def understand(utterance):
+    """(name, argument, corrected_from) for what an utterance asks, or (None, None, None).
+
+    Most specific first:
+        1. a declared phrase              "what can you do", "stop talking"
+        2. a command word anywhere        "what time is it", "can you open notepad"
+        3. a guess at the first word      "tim" -> `time`; never for EXACT_ONLY commands
+
+    A phrase outranks a command word inside it -- "stop talking" means `quiet`, not `stop` --
+    unless a real command name comes before the phrase, which then takes it as its argument
+    ("type stop talking"). corrected_from is the alias or guessed word, when there was one.
+    """
+    commands = load()
+    words, spoken = _tokens(utterance)
+    if not words:
+        return None, None, None
+
+    start, after, phrase_name, implied = _phrase(words)
+    index, name, exact = _scan(words)
+
+    if phrase_name is not None and not (exact and index < start):
+        argument = _argument(words[after:], spoken[after:], _verbatim(phrase_name))
+        return phrase_name, " ".join(part for part in (implied, argument) if part), None
+
+    if name is not None:
+        argument = _argument(words[index + 1:], spoken[index + 1:], _verbatim(name))
+        if not argument and not _verbatim(name):
+            argument = _before(words[:index])
+        reported = not exact and _aliases[words[index]][1]
+        return name, argument, words[index] if reported else None
+
+    # Guessing stays limited to the first word: over every word, ordinary filler turns into
+    # commands. And never into one that destroys or quits on a mishearing.
+    guessable = [name for name, module in commands.items() if not getattr(module, "EXACT_ONLY", False)]
+    close = difflib.get_close_matches(words[0], guessable, n=1, cutoff=MATCH_CUTOFF)
+    if close:
+        return close[0], _argument(words[1:], spoken[1:], _verbatim(close[0])), words[0]
+
+    return None, None, None
+
+
+def opens_with_command(utterance):
+    """Whether an utterance starts the way a command does, after nothing but OPENERS.
+
+    For when the wake word was a guess: misheard, or found after the start of what was heard.
+    understand() takes a command word from anywhere, which is far too loose then -- "commuter
+    traffic made me lose track of time" would answer with the time.
+    """
+    load()
+    words = _tokens(utterance)[0]
+    for i, word in enumerate(words):
+        if any(tuple(words[i:i + len(phrase)]) == phrase for phrase, _, _ in _phrases):
+            return True
+        if word in _commands or word in _aliases:
+            return True
+        if word not in OPENERS:
+            return False
+    return False
+
+
+def usage(module):
+    """How to say a command, built from its EXAMPLE and the live wake word."""
+    return f"{settings.get('prefix')} {getattr(module, 'EXAMPLE', '') or module.NAME}"
+
+
+def suggest(utterance):
+    """The command an unrecognised utterance most likely meant, or None.
+
+    Names only, never aliases: aliases are short and odd enough ("switch", "folks") that ordinary
+    words score well against them.
+    """
+    commands = load()
+    for word in _tokens(utterance)[0]:
+        if len(word) >= 3:
+            close = difflib.get_close_matches(word, list(commands), n=1, cutoff=SUGGEST_CUTOFF)
+            if close:
+                return commands[close[0]]
+    return None
+
+
+def _report_unknown(utterance):
+    """Offer the one command they probably meant, in words that would have worked."""
+    module = suggest(utterance)
+    if module is not None:
+        warn(f"I don't know '{utterance}'. Did you mean {module.NAME}? Say {usage(module)}.")
+        return
+
+    # Perhaps an app named without a verb: "computer notepad".
+    app = apps.find(" ".join(_tokens(utterance)[0]))
+    if app is not None:
+        warn(f"I don't know '{utterance}'. If you meant the app, say {settings.get('prefix')} open {app.name}.")
+        return
+
+    examples = [usage(_commands[name]) for name in ("open", "time") if name in _commands]
+    if examples:
+        warn(f"I don't know '{utterance}'. You can say things like {examples[0]}.")
+        if len(examples) > 1:
+            detail(f"Or: {', or '.join(examples[1:])}.")
+        return
+
+    warn(f"I don't know '{utterance}'.")
+
+
+def _chain(utterance):
+    """Split "open notepad and type hello" into the commands in it.
+
+    Only before an exact command name, and never inside a VERBATIM command's text, which takes
+    everything after it: "type salt and pepper" and "search cats and dogs" stay whole.
+    """
+    tokens = utterance.split()
+    for i in range(1, len(tokens) - 1):
+        if _clean(tokens[i]) in CHAIN_WORDS and _clean(tokens[i + 1]) in _commands:
+            head = tokens[:i]
+            while head and _clean(head[-1]) in CHAIN_WORDS:   # "and then"
+                head = head[:-1]
+            first = " ".join(head).rstrip(",")
+            name = understand(first)[0]
+            if name is None or _verbatim(name):
+                break
+            return [first, *_chain(" ".join(tokens[i + 1:]))]
+    return [utterance]
+
+
+def dispatch(utterance):
+    """Run the one command an utterance asks for. Returns what the command returns."""
     utterance = utterance.strip()
     if not utterance:
         return None
 
-    name, argument, corrected_from = understand(commands, utterance)
-
+    name, argument, corrected = understand(utterance)
     if name is None:
-        _report_unknown(commands, utterance)
+        _report_unknown(utterance)
         return None
 
-    if corrected_from:
-        # Written but not spoken: the command's own confirmation follows
-        # immediately and already says what it decided to do.
-        detail(f"(heard '{corrected_from}', taking it as '{name}')")
+    if corrected:
+        # Written, not spoken: the command's own confirmation follows straight away.
+        detail(f"(heard '{corrected}', taking it as '{name}')")
 
-    module = commands[name]
+    module = _commands[name]
+    if not getattr(module, "TAKES_ARG", False):
+        return module.run()
+    if not argument and not getattr(module, "ARG_OPTIONAL", False):
+        say(f"'{module.NAME}' needs something after it, like {usage(module)}.")
+        return None
+    return module.run(argument)
 
-    if getattr(module, "TAKES_ARG", False):
-        # An ARG_OPTIONAL command does something sensible with nothing after
-        # it, so being told it needs an argument would be wrong: `help` on
-        # its own is the command's main use.
-        if not argument and not getattr(module, "ARG_OPTIONAL", False):
-            say(f"'{module.NAME}' needs something after it, like "
-                f"{usage(module)}.")
+
+def run(utterance):
+    """Run everything an utterance asks for, logging it and containing any error, so one failing
+    command cannot take the microphone loop down. Returns STOP when the app should quit."""
+    detail(f"> {utterance}")
+    load()
+    parts = _chain(utterance.strip())
+    for i, part in enumerate(parts):
+        try:
+            if dispatch(part) is STOP:
+                return STOP
+            name = understand(part)[0]
+            if i + 1 < len(parts) and hasattr(_commands.get(name), "settle"):
+                _commands[name].settle()
+        except Exception as e:
+            log.exception("Command failed: %s", part)
+            warn(f"Could not run that: {e}")
             return None
-        return module.run(argument)
-
-    return module.run()
+    return None

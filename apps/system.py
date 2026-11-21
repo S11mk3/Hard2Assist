@@ -1,15 +1,11 @@
-"""Apps built into Windows.
+"""Apps built into Windows, listed by hand for the window title each is found by.
 
-Listed by hand because they need details that cannot be discovered
-automatically: the window title to find them by, and which ones must never be
-killed.
+Aliases are lowercase. The odd-looking ones ("task manger", "disc managment") are what speech
+recognition returns for those names.
 """
 
 from .app import App
 
-# Aliases are lowercase. The odd-looking entries ("task manger", "disc
-# managment") are not typos -- they are what speech recognition returns for
-# those names.
 APPS = [
     App("calculator", "calc", "Calculator", ("calc",)),
     App("notepad", "notepad", "Notepad"),
@@ -17,8 +13,7 @@ APPS = [
     App("wordpad", "write", "WordPad"),
     App("snipping tool", "snippingtool", "Snipping Tool", ("screenshot",)),
 
-    App("file explorer", "explorer", aliases=("explorer",),
-        window_class="CabinetWClass", protected=True),
+    App("file explorer", "explorer", aliases=("explorer",), window_class="CabinetWClass"),
 
     App("task manager", "taskmgr", "Task Manager", ("taskmgr", "task manger")),
     App("command prompt", "cmd", "cmd.exe", ("cmd",)),
@@ -28,10 +23,8 @@ APPS = [
     App("control panel", "control", "Control Panel", ("control pan",)),
     App("registry editor", "regedit", "Registry Editor", ("regedit",)),
 
-    App("device manager", "devmgmt.msc", "Device Manager",
-        ("device manger", "device man")),
-    App("disk management", "diskmgmt.msc", "Disk Management",
-        ("disk managment", "disc managment")),
+    App("device manager", "devmgmt.msc", "Device Manager", ("device manger", "device man")),
+    App("disk management", "diskmgmt.msc", "Disk Management", ("disk managment", "disc managment")),
     App("services", "services.msc", "Services"),
     App("computer management", "compmgmt.msc", "Computer Management",
         ("computer managment", "computer manger")),
@@ -39,8 +32,7 @@ APPS = [
 
     App("system information", "msinfo32", "System Information"),
     App("resource monitor", "resmon", "Resource Monitor"),
-    App("performance monitor", "perfmon", "Performance Monitor",
-        ("performance mon",)),
+    App("performance monitor", "perfmon", "Performance Monitor", ("performance mon",)),
     App("user accounts", "netplwiz", "User Accounts", ("user account",)),
 
     App("narrator", "narrator", "Narrator"),

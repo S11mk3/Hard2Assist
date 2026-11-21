@@ -10,7 +10,7 @@ PREFIX = "computer"
 
 @pytest.fixture
 def opens_with_command(commands):
-    return lambda text: registry.opens_with_command(commands, text)
+    return registry.opens_with_command
 
 
 @pytest.mark.parametrize("heard, command", [
@@ -18,6 +18,8 @@ def opens_with_command(commands):
     ("COMPUTER time", "time"),
     # Case and punctuation stay, so `type` can type the text as heard.
     ("Computer, type Hello there.", "type Hello there."),
+    # The wake word alone: the listener answers "Yes?".
+    ("Computer.", ""),
 ])
 def test_the_exact_wake_word_always_counts(heard, command):
     assert listener.find_command(heard, PREFIX) == (command, None)

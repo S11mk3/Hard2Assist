@@ -1,87 +1,70 @@
-"""Press a key, or a keyboard shortcut, in the app in front."""
+"""Press a key, a shortcut, or any key combination in the app you last named."""
 
 import session
 import win
-from output import detail, say
+from output import detail, say, warn
 
 NAME = "press"
 TAKES_ARG = True
-ALIASES = ("hit", "tap", "pressed", "presses")
-HELP = "press <key>  -- press a key or shortcut: enter, tab, escape, save, copy, paste"
+ALIASES = ("pressed", "presses")
+SYNONYMS = ("hit", "tap")
+# Said without "press" at all. "close tab" and "open a new tab" start with other commands' names,
+# which a phrase outranks.
+PHRASES = {"close tab": "close tab", "close the tab": "close tab", "close this tab": "close tab",
+           "new tab": "new tab", "open new tab": "new tab", "open a new tab": "new tab"}
+HELP = "press <key> -- press a key or shortcut: enter, tab, save, copy, paste, 'control shift t'"
 EXAMPLE = "press enter"
 
 ABOUT = """\
-Press taps a single key, or a keyboard shortcut, in the window in front.
-Keys: enter, tab, escape, space, backspace, delete, home, end, and the
-four arrow keys -- "press up", "press left".
+Press taps a key, a shortcut, or any combination of keys, in the app you
+last named -- or, if you haven't named one, the window in front.
+Keys: enter, tab, escape, space, backspace, delete, insert, home, end,
+page up, page down, the arrow keys, F1 to F12, any letter or digit.
 Shortcuts: save, copy, paste, cut, undo, redo, select all, find, print,
-new tab, close tab.
-"press the enter key" works as well as "press enter".\
+new tab, close tab, switch window.
+Combinations: name the keys held down first -- "press control shift t",
+"press alt f4", "press windows d".
+"new tab" and "close tab" work without saying "press".\
 """
 
-CTRL = win.VK_CONTROL
-
-# What each spoken name presses. One table rather than a command per key: a
-# folder of near-identical files would be harder to extend, and "press save"
-# and "computer save" would compete for the same meaning.
-KEYS = {
-    "enter": (win.VK_RETURN,),
-    "return": (win.VK_RETURN,),
-    "new line": (win.VK_RETURN,),
-    "tab": (win.VK_TAB,),
-    "escape": (win.VK_ESCAPE,),
-    "esc": (win.VK_ESCAPE,),
-    "space": (win.VK_SPACE,),
-    "spacebar": (win.VK_SPACE,),
-    "backspace": (win.VK_BACK,),
-    "back space": (win.VK_BACK,),
-    "delete": (win.VK_DELETE,),
-    "home": (win.VK_HOME,),
-    "end": (win.VK_END,),
-    "up": (win.VK_UP,),
-    "down": (win.VK_DOWN,),
-    "left": (win.VK_LEFT,),
-    "right": (win.VK_RIGHT,),
-
-    "save": (CTRL, ord("S")),
-    "copy": (CTRL, ord("C")),
-    "paste": (CTRL, ord("V")),
-    "cut": (CTRL, ord("X")),
-    "undo": (CTRL, ord("Z")),
-    "redo": (CTRL, ord("Y")),
-    "select all": (CTRL, ord("A")),
-    "find": (CTRL, ord("F")),
-    "print": (CTRL, ord("P")),
-    "new tab": (CTRL, ord("T")),
-    "close tab": (CTRL, ord("W")),
+# What people call by what it does rather than by its keys.
+SHORTCUTS = {
+    "save": "control s", "copy": "control c", "paste": "control v", "cut": "control x",
+    "undo": "control z", "redo": "control y", "select all": "control a", "find": "control f",
+    "print": "control p", "new tab": "control t", "close tab": "control w",
+    "new line": "enter", "switch window": "alt tab",
 }
 
-# Offered when a key is not recognised. The whole table would be a wall of
-# words to hear read out, so this is the useful part of it.
-SUGGESTED = ("enter", "tab", "escape", "delete", "save", "copy", "paste",
-             "undo", "select all")
+# Offered when a key is not recognised; the whole list would be a wall of words to hear.
+SUGGESTED = ("enter", "tab", "escape", "delete", "save", "copy", "paste", "undo", "select all")
+
+
+def _name(spoken):
+    """"enter key" -> "enter": people say the word "key" aloud."""
+    name = spoken.lower().strip(" ,.")
+    for filler in (" keys", " key", " button"):
+        name = name.removesuffix(filler)
+    return name
+
+
+def keys_for(spoken):
+    """The virtual keys spoken names, or None: "enter key", "save", "control shift t"."""
+    name = _name(spoken)
+    return win.parse_keys(SHORTCUTS.get(name, name))
 
 
 def run(argument):
-    key = argument.lower().strip().strip(" ,.")
-
-    # "press the enter key" is how people say it out loud. The registry has
-    # already dropped the "the"; the trailing "key" is left to here.
-    for filler in (" key", " button"):
-        if key.endswith(filler):
-            key = key[:-len(filler)]
-
-    if key not in KEYS:
-        say(f"I don't know a key called {key}.")
-        detail(f"Try {', '.join(SUGGESTED)}.")
+    keys = keys_for(argument)
+    name = _name(argument)
+    if keys is None:
+        warn(f"I don't know a key called {name}.")
+        detail(f"Try {', '.join(SUGGESTED)}, or name keys together like 'control shift t'.")
         return
 
     target = session.keyboard_target()
     if target is None:
         return
-
-    if not win.send_keys(*KEYS[key]):
-        session.refused(f"press that in {target}.")
+    if not win.send_keys(*keys):
+        session.refused(f"press that in {target}")
         return
-
-    say(f"Pressed {key}")
+    say(f"Pressed {name}")

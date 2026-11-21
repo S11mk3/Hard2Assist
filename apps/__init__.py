@@ -1,99 +1,23 @@
-"""The catalogue of everything Hard2Assist can open.
+"""The catalogue of everything Hard2Assist can open, searched in this order:
 
-Five sources, searched in this order:
+    itself     Hard2Assist                          apps/itself.py
+    system     built into Windows                   apps/system.py
+    mine       what the user pointed me at          %APPDATA%\\Hard2Assist\\my-apps.json
+    folder     Documents, Downloads and the rest    apps/folders.py
+    installed  Start Menu, then Store apps          apps/installed.py
+    web        websites                             apps/websites.py
 
-    system     apps built into Windows          apps/system.py
-    mine       apps the user picked manually    %APPDATA%\\Hard2Assist\\my-apps.json
-    folder     Documents, Downloads and friends apps/folders.py
-    installed  found in the Start Menu          apps/installed.py
-    web        websites                         apps/websites.py
-
-`open`, `close` and `kill` do not distinguish between them: everything goes
-through find(). User picks come before the Start Menu scan, so that manually
-correcting a bad match takes priority.
+The user's own picks come before folders and the Start Menu, so a correction always wins.
+`open`, `close` and the rest all go through find().
 """
 
+import collections
 import difflib
+import threading
 
 from . import folders, installed, itself, system, websites
 
-_catalogue = None
-
-
-def all_apps():
-    """Every known app, in search order. Scanned once and cached."""
-    global _catalogue
-    if _catalogue is None:
-        _catalogue = (
-            # The app itself comes first, so "focus yourself" can never be
-            # shadowed by a Start Menu shortcut of the same name.
-            [itself.ITSELF]
-            + list(system.APPS)
-            + installed.mine()
-
-            # After the user's own picks, so "open music" pointed at Spotify
-            # keeps meaning Spotify. Before the Start Menu scan, so a stray
-            # shortcut named "Downloads" cannot shadow the real folder.
-            + folders.known()
-
-            + installed.scan()
-            + list(websites.SITES)
-        )
-    return _catalogue
-
-
-def refresh():
-    """Discard the cached catalogue. Called after remembering a new app."""
-    global _catalogue
-    _catalogue = None
-
-
-def find(spoken):
-    """Return the App the user asked for, or None.
-
-    Forgiving by design: Start Menu shortcuts carry version numbers and
-    branding ("CCleaner 7", "Visual Studio Code") that nobody says out loud,
-    so an exact match alone would miss most installed programs.
-
-    Whichever app matches, its real name is spoken back in the confirmation,
-    so the user always hears which one was picked.
-    """
-    if not spoken:
-        return None
-
-    spoken = spoken.lower().strip()
-    catalogue = all_apps()
-
-    # 1. Exact name or declared alias.
-    for app in catalogue:
-        if app.matches(spoken):
-            return app
-
-    # 2. Prefix: "ccleaner" finds "ccleaner 7". Shortest name wins as the
-    #    closest fit.
-    starts = [a for a in catalogue if a.name.startswith(spoken)]
-    if starts:
-        return min(starts, key=lambda a: len(a.name))
-
-    # 3. Substring: "obs" inside "obs studio", but only for words long enough
-    #    that the match is unlikely to be a coincidence.
-    if len(spoken) >= 4:
-        contains = [a for a in catalogue if spoken in a.name]
-        if contains:
-            return min(contains, key=lambda a: len(a.name))
-
-    # 4. Fuzzy match, as a last resort for names the recogniser mangled.
-    close = difflib.get_close_matches(spoken, [a.name for a in catalogue],
-                                      n=1, cutoff=0.85)
-    if close:
-        return next(a for a in catalogue if a.name == close[0])
-
-    return None
-
-
-# The catalogue's sources, with the labels `help apps` shows them under, in
-# the order they are listed. Ordered by how likely the user is to want the
-# group, not by how the catalogue is searched.
+# How `help apps` labels each source, in the order it lists them.
 KINDS = (
     ("system", "Built into Windows"),
     ("folder", "Folders on this PC"),
@@ -102,63 +26,89 @@ KINDS = (
     ("web", "Websites"),
 )
 
+_catalogue = None
+_lock = threading.Lock()   # the window builds it in the background while commands may need it
+
+
+def all_apps():
+    """Every known app, in search order. Built once."""
+    global _catalogue
+    with _lock:
+        if _catalogue is None:
+            _catalogue = ([itself.ITSELF] + system.APPS + installed.mine() + folders.known()
+                          + installed.scan() + installed.scan_store() + websites.SITES)
+        return _catalogue
+
+
+def refresh():
+    global _catalogue
+    with _lock:
+        _catalogue = None
+
+
+def find(spoken):
+    """The App spoken names, or None.
+
+    Forgiving, because nobody says "CCleaner 7" or "Visual Studio Code" in full: an exact name or
+    alias, then the shortest name starting with it, then one containing it, then a near miss.
+    """
+    spoken = (spoken or "").lower().strip()
+    if not spoken:
+        return None
+
+    catalogue = all_apps()
+    for app in catalogue:
+        if app.matches(spoken):
+            return app
+
+    # Long enough that a clipped word cannot land on any app starting with its first letter.
+    if len(spoken) >= 3:
+        starts = [app for app in catalogue if app.name.startswith(spoken)]
+        if starts:
+            return min(starts, key=lambda app: len(app.name))
+
+    if len(spoken) >= 4:
+        contains = [app for app in catalogue if spoken in app.name]
+        if contains:
+            return min(contains, key=lambda app: len(app.name))
+
+    close = difflib.get_close_matches(spoken, [app.name for app in catalogue], n=1, cutoff=0.85)
+    return next((app for app in catalogue if app.name == close[0]), None) if close else None
+
+
+def _listed():
+    """Each listed app once, under the first source that has its name: the one find() opens."""
+    seen = set()
+    labels = dict(KINDS)
+    for app in all_apps():
+        if app.kind in labels and app.name not in seen:
+            seen.add(app.name)
+            yield app
+
 
 def names_by_kind():
-    """Names grouped by where they came from, as [(label, names)].
-
-    Canonical names only; aliases and misspellings stay hidden.
-
-    A name is listed once, under the first source that claims it -- the same
-    precedence find() applies, so what is shown is what would be opened. The
-    Start Menu scan turns up plenty of apps system.py already lists by hand,
-    which would otherwise appear twice.
-
-    Sorted for display. The catalogue itself stays in search order, since
-    find() relies on system apps being matched before Start Menu ones.
-    """
-    seen = set()
-    grouped = {kind: [] for kind, _ in KINDS}
-
-    for app in all_apps():
-        if app.name in seen or app.kind not in grouped:
-            continue
-
-        seen.add(app.name)
+    """[(label, sorted names)] for `help apps`."""
+    grouped = collections.defaultdict(list)
+    for app in _listed():
         grouped[app.kind].append(app.name)
+    return [(label, sorted(grouped[kind])) for kind, label in KINDS if grouped[kind]]
 
-    return [(label, sorted(grouped[kind]))
-            for kind, label in KINDS if grouped[kind]]
+
+def counts():
+    """How many apps of each kind, counted exactly as `help apps` lists them."""
+    return collections.Counter(app.kind for app in _listed())
 
 
 def remember(name, path):
-    """Save an app the user picked and make it findable immediately."""
+    """Save an app or website the user picked, findable at once."""
     app = installed.remember(name, path)
     refresh()
     return app
 
 
 def forget(name):
-    """Drop a remembered app or website. True if there was one to drop."""
+    """Drop something remember() saved. True if there was one."""
     dropped = installed.forget(name)
     if dropped:
         refresh()
     return dropped
-
-
-def counts():
-    """Number of apps per source kind, for the GUI's startup line.
-
-    Deduplicated exactly as names_by_kind() is, so the count in the window
-    agrees with the list `help apps` prints.
-    """
-    seen = set()
-    tally = {}
-
-    for app in all_apps():
-        if app.name in seen:
-            continue
-
-        seen.add(app.name)
-        tally[app.kind] = tally.get(app.kind, 0) + 1
-
-    return tally

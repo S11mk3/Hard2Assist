@@ -1,46 +1,45 @@
 """Report how much disk space is free."""
 
+import os
+
 import psutil
 
-from output import detail, say
+from output import detail, say, warn
 
 NAME = "disk"
 TAKES_ARG = False
-ALIASES = ("disc", "storage", "space", "drive")
-HELP = "disk         -- how much drive space is free"
+ALIASES = ("disc",)
+SYNONYMS = ("storage", "space", "drive")
+HELP = "disk -- how much drive space is free"
 
 ABOUT = """\
-Disk says how much space is free on your main drive.
+Disk says how much space is free on the drive Windows is on.
 "how much space is left" and "storage" reach it too.
 Every other drive is written here underneath, with how full each one is.
 An empty card reader or DVD drive is skipped rather than reported as
 zero.\
 """
 
+GB = 1024 ** 3
+
 
 def run():
-    reported = []
-
+    drives = []
     for part in psutil.disk_partitions(all=False):
-        # Skip drives with no media in them: an empty card reader or DVD
-        # drive raises here instead of reporting zero.
         try:
-            usage = psutil.disk_usage(part.mountpoint)
+            drives.append((part.mountpoint.rstrip("\\"), psutil.disk_usage(part.mountpoint)))
         except OSError:
-            continue
+            continue   # an empty card reader or DVD drive
 
-        free = usage.free / (1024 ** 3)
-        total = usage.total / (1024 ** 3)
-        drive = part.mountpoint.rstrip("\\")
-        reported.append((drive, free, total, usage.percent))
-
-    if not reported:
-        say("I could not read any drives.")
+    if not drives:
+        warn("I could not read any drives.")
         return
 
-    # Speak only the primary drive; the full per-drive breakdown is written.
-    first = reported[0]
-    say(f"{first[0]} has {round(first[1])} gigabytes free")
+    system = os.environ.get("SYSTEMDRIVE", "C:").upper()
+    drives.sort(key=lambda entry: entry[0].upper() != system)   # Windows' own drive first
 
-    for drive, free, total, percent in reported:
-        detail(f"  {drive}  {free:.0f} GB free of {total:.0f} GB  ({percent:.0f}% used)")
+    drive, usage = drives[0]
+    say(f"{drive.rstrip(':')} drive has {round(usage.free / GB)} gigabytes free")
+    for drive, usage in drives:
+        detail(f"  {drive}  {usage.free / GB:.0f} GB free of {usage.total / GB:.0f} GB  "
+               f"({usage.percent:.0f}% used)")

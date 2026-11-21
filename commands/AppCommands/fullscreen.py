@@ -5,14 +5,10 @@ import win
 
 NAME = "fullscreen"
 TAKES_ARG = True
+ALIASES = ("maximized", "maximised", "maximizes")
+SYNONYMS = ("maximize", "maximise", "expand", "enlarge", "bigger")
 
-# "maximize" is what Windows itself calls this; the rest are plain synonyms
-# and the recogniser's frequent guesses.
-ALIASES = ("maximize", "maximise", "maximized", "maximised", "maximizes",
-           "expand", "enlarge", "bigger")
-
-# The recogniser returns "full screen" as two words more often than one, and
-# aliases are matched a word at a time, so a phrase is the only way to it.
+# The recogniser writes "full screen" as two words more often than one.
 PHRASES = ("full screen",)
 
 HELP = "fullscreen <app> -- fill the screen with an app ('shrink' puts it back)"

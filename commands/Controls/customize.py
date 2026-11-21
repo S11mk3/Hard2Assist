@@ -4,11 +4,9 @@ import wizard
 
 NAME = "customize"
 TAKES_ARG = False
-# "settings" is deliberately absent: Windows Settings is an app in the
-# catalogue, and claiming the word here made "computer settings" open this
-# conversation instead of anything useful.
-ALIASES = ("customise", "setup", "preferences", "configure")
-HELP = "customize    -- change the wake word and how I listen"
+# Not "settings": that is Windows Settings, an app, and "computer settings" should open it.
+SYNONYMS = ("customise", "setup", "preferences", "configure")
+HELP = "customize -- change the wake word and how I listen"
 
 ABOUT = """\
 Customize walks through the setup conversation again, out loud.
@@ -24,6 +22,4 @@ from then on.\
 
 
 def run():
-    # Runs on the microphone thread, where the audio source is open and
-    # owned by this thread -- which is what the conversation needs.
     wizard.run()

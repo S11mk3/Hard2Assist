@@ -1,43 +1,89 @@
-"""Message output for commands.
+"""What commands tell the user.
 
-    say(text)      written to the log AND spoken aloud
-    detail(text)   written to the log only
+    say(text)      written and spoken
+    warn(text)     written highlighted, and spoken: something did not work
+    detail(text)   written only, for lists and long explanations
 
-Messages go to a replaceable listener rather than to print(): the GUI points
-it at its log panel, and the built .exe has no console at all.
+The window points the sink at its log panel; --console prints. Once start_log() has run,
+everything also goes to log.txt, crashes included, since the built app has no console.
 """
 
+import logging
+import logging.handlers
+import os
 import sys
+import threading
 
 import speech
 
+log = logging.getLogger("hard2assist")
+log.addHandler(logging.NullHandler())
 
-def _write(text):
-    """The default sink: the terminal, used in --console mode."""
+
+def _print(text, _tag=None):
     try:
         print(text)
     except UnicodeEncodeError:
-        # Window titles and Start Menu names contain characters no console
-        # codepage can represent. Substitute rather than let one glyph raise.
+        # Window titles and Start Menu names hold characters a console codepage cannot show.
         encoding = getattr(sys.stdout, "encoding", None) or "ascii"
         print(text.encode(encoding, "replace").decode(encoding, "replace"))
 
 
-_listener = _write
+_sink = _print
 
 
-def on_message(listener):
-    """Redirect all output to `listener(text)`. The GUI calls this at startup."""
-    global _listener
-    _listener = listener
+def on_message(sink):
+    """Send everything to sink(text, tag), where tag is None or "warn"."""
+    global _sink
+    _sink = sink
 
 
 def say(text):
-    """Write the message and speak it aloud."""
-    _listener(text)
+    _sink(text, None)
+    log.info(text)
+    speech.speak(text)
+
+
+def warn(text):
+    _sink(text, "warn")
+    log.warning(text)
     speech.speak(text)
 
 
 def detail(text):
-    """Write the message only. For lists and long explanations."""
-    _listener(text)
+    _sink(text, None)
+    log.info(text)
+
+
+def plural(count, noun):
+    """ "1 window", "2 windows", "3 processes"."""
+    if count != 1:
+        noun += "es" if noun.endswith("s") else "s"
+    return f"{count} {noun}"
+
+
+def start_log(folder):
+    """Also write every line, and every unhandled error, to folder/log.txt."""
+    try:
+        os.makedirs(folder, exist_ok=True)
+        handler = logging.handlers.RotatingFileHandler(
+            os.path.join(folder, "log.txt"), maxBytes=1_000_000, backupCount=1, encoding="utf-8")
+    except OSError:
+        return
+
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+
+    previous_hook, previous_thread_hook = sys.excepthook, threading.excepthook
+
+    def crashed(*exc_info):
+        log.error("Unhandled error", exc_info=exc_info)
+        previous_hook(*exc_info)
+
+    def thread_crashed(args):
+        log.error("Unhandled error in thread %s", args.thread.name if args.thread else "?",
+                  exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+        previous_thread_hook(args)
+
+    sys.excepthook, threading.excepthook = crashed, thread_crashed

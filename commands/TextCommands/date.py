@@ -6,8 +6,9 @@ from output import say
 
 NAME = "date"
 TAKES_ARG = False
-ALIASES = ("day", "today", "dates")
-HELP = "date         -- what day it is"
+ALIASES = ("dates",)
+SYNONYMS = ("day", "today")
+HELP = "date -- what day it is"
 
 ABOUT = """\
 Date says the day of the week and the date out loud.
@@ -16,5 +17,4 @@ Date says the day of the week and the date out loud.
 
 
 def run():
-    now = datetime.now()
-    say(f"It's {now.strftime('%A, %B %#d')}")
+    say(f"It's {datetime.now().strftime('%A, %B %#d')}")   # %#d: no leading zero, on Windows

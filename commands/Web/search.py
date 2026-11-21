@@ -1,49 +1,67 @@
-"""Search the web for the spoken words."""
+"""Search the web, or one site, for the spoken words."""
 
 import os
 import urllib.parse
 
-from output import detail, say
+from output import detail, say, warn
 
 NAME = "search"
 TAKES_ARG = True
-ALIASES = ("google", "surge")
-
-# The argument is the query: "search the meaning of life" must keep its
-# "the". The leading "for" is still dropped below.
-VERBATIM = True
-HELP = "search <words> -- search the web"
+VERBATIM = True   # the query keeps every word: "search the meaning of life"
+ALIASES = ("surge",)
+SYNONYMS = ("google",)
+HELP = "search <words> -- search the web ('search youtube for <words>' searches one site)"
 EXAMPLE = "search how to cook rice"
 
 ABOUT = """\
 Search opens your browser on the results for whatever you say after it.
 "{prefix} google how to cook rice" does the same thing, and "search for
 cats" drops the "for" rather than searching for it.
+Name a site to search it instead: "search youtube for cats", "search
+cats on wikipedia". Works for youtube, wikipedia, github, reddit, maps and
+amazon.
 It opens in whichever browser Windows treats as the default.\
 """
 
 ENGINE = "https://www.google.com/search?q="
+SITES = {
+    "youtube": "https://www.youtube.com/results?search_query=",
+    "wikipedia": "https://en.wikipedia.org/w/index.php?search=",
+    "github": "https://github.com/search?q=",
+    "reddit": "https://www.reddit.com/search/?q=",
+    "google maps": "https://www.google.com/maps/search/",
+    "maps": "https://www.google.com/maps/search/",
+    "amazon": "https://www.amazon.com/s?k=",
+}
+
+
+def where(words):
+    """(results address, query, site or None): "youtube for cats", "cats on wikipedia"."""
+    query = words.strip().rstrip(".?!")
+    if query.lower().startswith("for "):
+        query = query[4:].strip()
+
+    lowered = query.lower()
+    for site in sorted(SITES, key=len, reverse=True):   # "google maps" before "maps"
+        for lead in (f"{site} for ", f"on {site} for ", f"{site} "):
+            if lowered.startswith(lead):
+                return SITES[site], query[len(lead):].strip(), site
+        for tail in (f" on {site}", f" in {site}"):
+            if lowered.endswith(tail):
+                return SITES[site], query[:-len(tail)].strip(), site
+    return ENGINE, query, None
 
 
 def run(argument):
-    words = argument.strip()
-
-    # "search for cats" and "google for cats" both land here; drop the
-    # leading "for" so it does not become part of the query.
-    if words.lower().startswith("for "):
-        words = words[4:].strip()
-
-    if not words:
+    engine, query, site = where(argument)
+    if not query:
         say("What should I search for?")
         return
 
-    url = ENGINE + urllib.parse.quote_plus(words)
-
     try:
-        os.startfile(url)
+        os.startfile(engine + urllib.parse.quote_plus(query))
     except OSError as e:
-        say("Could not open the browser")
+        warn("Could not open the browser")
         detail(f"({e})")
         return
-
-    say(f"Searching for {words}")
+    say(f"Searching {site} for {query}" if site else f"Searching for {query}")

@@ -1,15 +1,14 @@
-# Minimums are the versions Hard2Assist is tested with. pycaw in particular
-# must be recent: audio.py uses GetSpeakers().EndpointVolume, which older
-# releases do not have.
+# Minimums are the versions Hard2Assist is tested with. pycaw in particular must be recent:
+# audio.py uses GetSpeakers().EndpointVolume, which older releases do not have.
 SpeechRecognition>=3.16.1
 PyAudio>=0.2.14
 psutil>=7.2.2
 comtypes>=1.4.16
 pycaw>=20251023
 
+# listener.py measures loudness with audioop, which Python 3.13 removed from the standard library.
+audioop-lts>=0.2.1; python_version >= "3.13"
+
 # The offline speech recogniser. Its model is not in the repository: run
 # `python build.py --fetch-model` once to put it in models/.
-moonshine-voice>=0.1.5
-
-# Only needed to build the .exe, not to run from source.
-pyinstaller>=6.21.0
+moonshine-voice>=0.1.6

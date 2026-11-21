@@ -3,12 +3,13 @@
 import session
 import settings
 import win
-from output import detail, say
+from output import detail, say, warn
 
 NAME = "focus"
 TAKES_ARG = True
-ALIASES = ("focussed", "focused", "folks", "switch", "show")
-HELP = "focus <app>  -- bring an open app to the front"
+ALIASES = ("focussed", "focused", "folks")
+SYNONYMS = ("switch", "show")
+HELP = "focus <app> -- bring an open app to the front"
 EXAMPLE = "focus notepad"
 
 ABOUT = """\
@@ -26,24 +27,21 @@ flashes instead.\
 
 
 def run(argument):
-    app = session.resolve(argument)
-    if app is None:
-        session.unknown(argument)
+    found = session.target(argument)
+    if found is None:
         return
+    app = found[0]
 
+    # Front first, so this is the window alt-tab would reach.
     handles = win.windows_of(app)
     if not handles:
-        say(f"{app.name} isn't open. Say '{settings.get('prefix')} open "
-            f"{app.name}' if you want me to open it.")
+        say(f"{app.name} isn't open. Say '{settings.get('prefix')} open {app.name}' to open it.")
         return
 
-    # windows_of() returns handles in Z-order, front first, so the first is
-    # what alt-tab would reach: this app's most recently active window. A
-    # minimised window keeps its WS_VISIBLE style, so it is still in there.
     if win.focus_window(handles[0]):
         say(f"Showing {app.name}")
         return
 
-    say(f"Windows would not bring {app.name} to the front")
-    detail("Windows blocks a background app from stealing focus in some "
-           "cases; its taskbar button should be flashing instead.")
+    warn(f"Windows would not bring {app.name} to the front")
+    detail("Windows stops a background app taking the focus in some cases; its taskbar button "
+           "should be flashing instead.")

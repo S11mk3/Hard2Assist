@@ -1,27 +1,17 @@
-"""Turning what was heard into what gets typed.
+"""Turning what was heard into what gets typed, for `type` and `dictate`.
 
-Shared by `type` and `dictate`. The recogniser returns bare lowercase words
-with no punctuation, so "hello there comma how are you" is what arrives.
-
-Top level rather than a helper beside the two commands: command modules are
-loaded by file path and their folder never joins sys.path, so one command
-cannot import another or anything sitting next to it.
+Punctuation can be spoken -- "hello there comma how are you question mark" -- and the offline
+recogniser also adds punctuation of its own around those words, so a spoken mark replaces any
+the recogniser put beside it rather than doubling up.
 """
 
 import re
 
 import win
 
-# Spoken names for characters that cannot be dictated directly.
-#
-# Short by necessity: each entry is a word that can no longer be typed
-# literally, so "the period was long" cannot be dictated while "period" is in
-# the table.
-SPOKEN = {
-    "new line": "\n",
-    "newline": "\n",
-    "next line": "\n",
-    "new paragraph": "\n\n",
+# Each of these words can no longer be typed literally ("the period was long"), so the list is
+# kept short.
+MARKS = {
     "comma": ",",
     "period": ".",
     "full stop": ".",
@@ -29,47 +19,39 @@ SPOKEN = {
     "exclamation mark": "!",
     "exclamation point": "!",
 }
+BREAKS = {
+    "new line": "\n",
+    "newline": "\n",
+    "next line": "\n",
+    "new paragraph": "\n\n",
+}
 
-# Whole words only, so "commas" and "periodic" are typed as themselves.
-# Longest first, or "new line" would never match past "new".
-#
-# Case-insensitive: the recogniser capitalises the first word of an utterance
-# often enough that a dictated "new line" arrives as "New line". The lookup
-# lowercases the match to find the key again.
-_SPOKEN = re.compile(
-    r"\b(" + "|".join(sorted(SPOKEN, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
-)
+
+def _either(words):
+    # Longest first, or "new line" would never match past "new".
+    return "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
+
+
+_PUNCTUATION = r"[,.;:!?]"
+
+# Whole words only, so "commas" and "periodic" stay themselves. A mark takes the place of the
+# recogniser's punctuation on both sides of it; a break keeps the full stop before it.
+_MARK = re.compile(rf"\s*{_PUNCTUATION}*\s*\b({_either(MARKS)})\b{_PUNCTUATION}*", re.IGNORECASE)
+_BREAK = re.compile(rf"[ \t]*\b({_either(BREAKS)})\b{_PUNCTUATION}*[ \t]*", re.IGNORECASE)
 
 
 def prepare(heard):
-    """The text to type for a recognised phrase.
-
-    Substitutes the spoken characters and capitalises the first letter.
-    """
-    text = _SPOKEN.sub(lambda m: SPOKEN[m.group(1).lower()], heard.strip())
-
-    # A substitution leaves the space that surrounded the spoken word --
-    # "hello , how" -- so close it up.
-    text = re.sub(r" +([,.?!])", r"\1", text)
-    text = re.sub(r"[ \t]*\n[ \t]*", "\n", text)
-
-    if text and text[0].isalpha():
-        text = text[0].upper() + text[1:]
-
-    return text
+    """The text to type: spoken punctuation substituted, and each sentence and line capitalised."""
+    text = _MARK.sub(lambda m: MARKS[m.group(1).lower()], heard.strip())
+    text = _BREAK.sub(lambda m: BREAKS[m.group(1).lower()], text)
+    return re.sub(r"(^|[.!?]\s+|\n)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
 
 
 def type_out(text):
-    """Type text, turning newlines into Enter presses. False if refused.
-
-    A newline cannot go through as a character: send_text() injects Unicode,
-    and a text box listens for the Enter key rather than a line feed.
-    """
+    """Type text, newlines as Enter presses (a text box ignores a typed line feed). False if refused."""
     for i, line in enumerate(text.split("\n")):
         if i and not win.send_keys(win.VK_RETURN):
             return False
         if line and not win.send_text(line):
             return False
-
     return True

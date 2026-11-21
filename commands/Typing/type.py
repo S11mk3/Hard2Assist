@@ -1,4 +1,6 @@
-"""Type what you say into the app in front."""
+"""Type what you say into the app you last named."""
+
+import re
 
 import session
 import spoken
@@ -6,48 +8,46 @@ from output import say
 
 NAME = "type"
 TAKES_ARG = True
-
-# The argument is the text: "type the quick brown fox" must keep its "the",
-# so the registry's filler-stripping is turned off.
-VERBATIM = True
-
-# "write" is a plain synonym; the rest are the recogniser's usual guesses at
-# the word said mid-sentence.
-ALIASES = ("types", "typed", "write", "writes")
-
+VERBATIM = True   # "type the quick brown fox" keeps its "the"
+ALIASES = ("types", "typed")
+SYNONYMS = ("write", "writes")
 PHRASES = ("type out",)
-
-HELP = "type <words> -- type what you say into the app in front"
+HELP = "type <words> -- type what you say into the app you last named"
 EXAMPLE = "type hello world"
 
 ABOUT = """\
-Type sends whatever you say next to the window in front.
-Recognition gives me plain lowercase words with no punctuation, so a few
-marks are spoken: say "comma", "period", "question mark" and "new line"
-where you want them. "{prefix} type hello there comma how are you
-question mark" types "Hello there, how are you?".
-If my own window is in front, I switch to the app you last named first,
-so "type" follows "open" the way the two sound when you say them.
+Type types whatever you say next into the app you last named, bringing it
+to the front if you have clicked into another window since -- so "type"
+follows "open" the way the two sound when you say them. If you haven't
+named an app yet, it types into the window in front.
+Punctuation can be said out loud where you want it: "comma", "period",
+"question mark" and "new line". "{prefix} type hello there comma how are
+you question mark" types "Hello there, how are you?".
 For more than a sentence or two, say "dictate" instead and just talk.\
 """
 
+# The recogniser quotes words it hears as quoted: 'type "hello".'. One quoted span, and nothing
+# but sentence punctuation after it, is the text to type.
+_QUOTED = re.compile(r'\s*["“]([^"“”]*)["”][.!?]?\s*')
+
+
+def unquoted(text):
+    match = _QUOTED.fullmatch(text)
+    return match.group(1) if match else text
+
 
 def run(argument):
-    text = spoken.prepare(argument)
+    text = spoken.prepare(unquoted(argument))
     if not text:
         say("There was nothing to type.")
         return
 
-    # Where the keys will land, with our own window moved out of the way if it
-    # was in front. Says why itself when there is nowhere sensible to type.
     target = session.keyboard_target()
     if target is None:
         return
 
-    # Typed before the confirmation, so a refusal is never announced as a
-    # success. say() only queues speech, so nothing is spoken in between.
+    # Typed before confirming, so a refusal is never announced as a success.
     if not spoken.type_out(text):
-        session.refused(f"type into {target}.")
+        session.refused(f"type into {target}")
         return
-
     say(f"Typed into {target}")
