@@ -54,7 +54,7 @@ def _hear(ears):
     if sentences:
         heard = sentences[-1]
 
-    answer = " ".join(re.findall(r"[\w']+", heard.lower().replace("’", "'")))
+    answer = " ".join(re.findall(r"[\w']+", heard.lower().replace("\u2019", "'")))
     if answer:
         detail(f"  > {answer}")
     return answer or None
@@ -148,59 +148,6 @@ def _ask_prefix(ears):
     _speak(f"Done. Say {chosen} before every command from now on.")
 
 
-FOCUSED_WORDS = ("only", "focus", "focused", "focussed", "selected", "front")
-ALWAYS_WORDS = ("always", "all", "everything", "background", "anytime", "constantly")
-
-
-def listen_when_in(answer):
-    """"always", "focused", or None, out of an answer to when to listen.
-
-    Focus words are looked for first, and "not always" counts as one: an answer like "only when
-    in focus, not always" holds both, and means focus.
-    """
-    words = answer.split()
-    if "not always" in answer or any(word in FOCUSED_WORDS for word in words):
-        return "focused"
-    if any(word in ALWAYS_WORDS for word in words):
-        return "always"
-    return None
-
-
-def _ask_listening(ears):
-    if ears.may_listen is None:
-        return   # console mode has no window to be in focus
-
-    current = settings.get("listen_when")
-    now = "all the time" if current == "always" else "only while my window is in focus"
-
-    def interpret(answer):
-        when = listen_when_in(answer)
-        if when == "always":
-            return "always", "I heard always. Should I keep listening even when my window is minimised?"
-        if when == "focused":
-            return "focused", "I heard only when in focus. Should I listen only while my window is in front?"
-        return None, ""
-
-    chosen = _ask(ears,
-                  "Next, when should I listen. I can listen all the time, even when my window is minimised, "
-                  "which is hands free but means the microphone is always on. Or I can listen only while my "
-                  "window is in focus, which is more private, since the microphone is switched off otherwise, "
-                  f"but means you have to click me first. Right now I listen {now}. Say always, or say focus, "
-                  "or say keep.",
-                  "Sorry. Say always, or say focus.",
-                  interpret)
-
-    if chosen is None:
-        _speak(f"Keeping it as it is. I listen {now}.")
-        return
-    settings.set("listen_when", chosen)
-    _speak("Done. I'll listen all the time." if chosen == "always"
-           else "Done. I'll only listen while my window is in focus.")
-
-
-QUESTIONS = (_ask_prefix, _ask_listening)
-
-
 def on_ready(ears):
     """The Listener's on_ready hook: set up on first run."""
     if settings.is_first_run():
@@ -225,16 +172,12 @@ def run(ears=None, first_time=False):
     speech.set_enabled(True)   # even after `quiet`: the conversation is nothing but questions
     try:
         if first_time:
-            _speak("Hello. I'm Hard2Assist, and this is the first time you've run me, so let's set a few "
-                   "things up. You can say keep at any point to leave something as it is.")
-        else:
-            _speak("Let's go through your settings. Say keep to leave one alone.")
-
-        for question in QUESTIONS:
-            question(ears)
+            _speak("Hello. I'm Hard2Assist, and this is the first time you've run me, so one quick question "
+                   "first.")
+        _ask_prefix(ears)
 
         settings.save()   # even when nothing changed, so first run is not offered again
         prefix = settings.get("prefix")
-        _speak(f"All done. Say {prefix} help to hear what I can do, or {prefix} customize to change these again.")
+        _speak(f"All done. Say {prefix} help to hear what I can do, or {prefix} customize to change it again.")
     finally:
         speech.set_enabled(was_enabled)

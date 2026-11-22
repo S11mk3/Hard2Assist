@@ -76,6 +76,8 @@ def test_verbatim_commands_get_the_words_as_heard(commands):
     ("minimized notepad", ("minimize", "notepad", "minimized")),
     # A first word that nearly names a command.
     ("tim", ("time", "", "tim")),
+    # A command glued onto the next word.
+    ("OpenObs Studio", ("open", "obs studio", "openobs")),
 ])
 def test_misheard_command_words_are_corrected(commands, utterance, expected):
     assert registry.understand(utterance) == expected
@@ -91,7 +93,7 @@ def test_synonyms_are_not_reported_as_corrections(commands, utterance, expected)
 
 
 @pytest.mark.parametrize("utterance", ["fill notepad", "skill notepad", "kilt chrome", "top", "shop",
-                                       "clone notepad"])
+                                       "clone notepad", "stopwatch", "killjoy", "closet"])
 def test_destructive_commands_are_never_guessed(commands, utterance):
     assert registry.understand(utterance)[0] not in ("kill", "stop", "close")
 

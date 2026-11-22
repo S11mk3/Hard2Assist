@@ -1,10 +1,10 @@
 """What commands tell the user.
 
     say(text)      written and spoken
-    warn(text)     written highlighted, and spoken: something did not work
+    warn(text)     written highlighted, with the failure chime, and spoken: something did not work
     detail(text)   written only, for lists and long explanations
 
-The window points the sink at its log panel; --console prints. Once start_log() has run,
+The dock points the sink at its conversation panel; --console prints. Once start_log() has run,
 everything also goes to log.txt, crashes included, since the built app has no console.
 """
 
@@ -33,13 +33,13 @@ _sink = _print
 
 
 def on_message(sink):
-    """Send everything to sink(text, tag), where tag is None or "warn"."""
+    """Send everything to sink(text, tag): tag is "say", "warn", or None for detail."""
     global _sink
     _sink = sink
 
 
 def say(text):
-    _sink(text, None)
+    _sink(text, "say")
     log.info(text)
     speech.speak(text)
 
@@ -47,6 +47,7 @@ def say(text):
 def warn(text):
     _sink(text, "warn")
     log.warning(text)
+    speech.beep_failed()
     speech.speak(text)
 
 

@@ -14,14 +14,11 @@ BUNDLE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))
 # The folder holding Hard2Assist.exe; the source tree when run from source.
 EXE_DIR = os.path.dirname(sys.executable) if FROZEN else BUNDLE_DIR
 
+# Settings, saved apps, added commands and the log: small, and they follow a roaming profile.
 USER_DIR = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "Hard2Assist")
 
-# The offline speech model, under models/. Not in git: build.py --fetch-model downloads it.
-MODEL = "moonshine-small-en"
-
-
-def model_dir():
-    return os.path.join(BUNDLE_DIR, "models", MODEL)
+# The speech models: hundreds of megabytes, so kept on this PC only.
+LOCAL_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Hard2Assist")
 
 
 def read_json(path):

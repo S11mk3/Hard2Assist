@@ -1,53 +1,47 @@
-"""The microphone loop, shared by the window and console modes.
+"""Listening: Moonshine hears everything on this PC, and lines that open with the wake word become
+commands.
 
-The window runs Listener.run() on a background thread, console mode on the main thread. Commands
-run on this thread too, one at a time, which is what lets `dictate` and the setup conversation
-listen through the open microphone.
-
-The microphone is only open while listening is allowed: under "only when in focus" it is closed
-whenever another window is in front, and a missing or failed microphone is retried until one
-works. Typed commands and push-to-talk work throughout.
+Moonshine's streaming transcriber does the hard part: it tells speech from noise by itself, shows
+a line's text while it is still being said, and finishes the line when the speaker pauses. The
+listener decides which finished lines are commands, and runs them one at a time on its own
+thread -- which is what lets `dictate` and the setup conversation wait for the next line.
 """
 
-import audioop
-import collections
-import contextlib
+import array
 import difflib
+import os
 import queue
 import re
 import threading
 import time
+import wave
 
-import speech_recognition as sr
-
-import recognizer
+import apps
+import models
+import registry
 import settings
 import speech
 import win
 from output import detail, log, say, warn
 
-LISTEN_TIMEOUT = 1    # short, so stop, pause and focus changes are noticed quickly
-PHRASE_LIMIT = 8
-ANSWER_TIMEOUT = 7    # how long a question waits for its answer
+ANSWER_TIMEOUT = 7    # how long a question waits for its answer to start
+LONGEST_LINE = 20     # how long one started past that may still run on
 RETRY_SECONDS = 3     # between attempts to open a missing microphone
+UPDATE_SECONDS = 0.25 # how often the text of a line still being said is refreshed
+
+# Kept muted this long after the voice stops, so its echo off the walls is not heard as speech.
+SETTLE_SECONDS = 0.3
 
 SETUP = "Setting up"  # the status while the setup conversation runs
-
-# Telling speech from the room; see _threshold().
-NOISE_WINDOW = 10        # seconds of recent audio the room's level is read from
-NOISE_PERCENTILE = 0.3   # how far up those levels, quietest first, the room is
-SPEECH_RATIO = 2.0       # how much louder than the room counts as speech
-MIN_THRESHOLD = 300
-CALIBRATE_SECONDS = 1.5
-
-# Read and discarded after the voice speaks: what the microphone buffered meanwhile, and the
-# room's echo. Without it the end of a question ("...or say keep") can come back as the answer.
-SETTLE_SECONDS = 0.3
 
 GREETINGS = ("hey", "hi", "hello", "ok", "okay")   # said before the wake word, not part of it
 WAKE_CUTOFF = 0.75   # how close a heard word must be to the wake word to count as it
 
 _current = None
+
+# A folder to keep every finished line's sound in, with what was heard -- for measuring how well
+# speech is recognised on a real voice and microphone. Set by `hard2assist.py --record`.
+RECORD_TO = None
 
 
 def current():
@@ -88,7 +82,7 @@ def _misheard_prefix(text, prefix):
 
 
 def find_command(text, prefix, opens_with_command=None):
-    """(command, heard_as) from an utterance; command is None without a wake word.
+    """(command, heard_as) from a line; command is None without a wake word.
 
     The wake word must come first, so conversation ("I bought a computer yesterday") does nothing.
     Spelled exactly at the start it always counts. Because recognition gets it wrong -- background
@@ -115,19 +109,26 @@ def find_command(text, prefix, opens_with_command=None):
     return None, None
 
 
-@contextlib.contextmanager
-def _microphone():
-    """The default microphone, open. sr.Microphone swallows a stream that will not open -- no
-    device, or Windows' privacy settings refusing this program -- and hands back None, which
-    only fails later as a confusing AttributeError; here it is an error at once."""
-    microphone = sr.Microphone()
-    source = microphone.__enter__()
-    if source.stream is None:   # __enter__ has already cleaned up
-        raise OSError("Windows would not open the microphone")
-    try:
-        yield source
-    finally:
-        microphone.__exit__(None, None, None)
+def _record(line):
+    """Save a finished line's sound (16 kHz mono, as Moonshine hears it) and its text."""
+    os.makedirs(RECORD_TO, exist_ok=True)
+    name = time.strftime("%Y%m%d-%H%M%S-") + f"{int(time.time() * 1000) % 1000:03d}"
+    pcm = array.array("h", (max(-32767, min(32767, int(sample * 32767))) for sample in line.audio_data))
+    with wave.open(os.path.join(RECORD_TO, name + ".wav"), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(16000)
+        f.writeframes(pcm.tobytes())
+    with open(os.path.join(RECORD_TO, "heard.tsv"), "a", encoding="utf-8") as f:
+        f.write(f"{name}.wav\t{line.text}\n")
+
+
+def vocabulary():
+    """The words this app listens for: command names, aliases and synonyms (lowercase, as they
+    should come out), and the names of the apps it can open (as they are written)."""
+    words = {word for word in registry.command_words() if len(word) > 2}
+    names = {app.title for app in apps.all_apps() if app.title and len(app.title) < 30}
+    return sorted(words) + sorted(names)
 
 
 def _greeting():
@@ -135,53 +136,19 @@ def _greeting():
     return f"Hello {name}, what can I help with?" if name else "Hello, what can I help with?"
 
 
-# -- how loud counts as speech -----------------------------------------------------
+class _LevelTap(queue.Queue):
+    """Stands in for MicTranscriber's audio queue, measuring each block's loudness on its way to
+    the transcriber -- for the dock's live waveform. Blocks arrive as (samples, rate)."""
 
+    def __init__(self, on_level):
+        super().__init__()
+        self._on_level = on_level
 
-class _Meter:
-    """Stands in for the microphone's stream, measuring every chunk listen() reads.
-
-    speech_recognition's own dynamic threshold only learns from chunks it has already judged
-    quiet, so it can only sink, until noise counts as speech. Measuring everything -- speech,
-    silence and noise -- keeps the room's level honest.
-    """
-
-    def __init__(self, source, levels):
-        self._stream = source.stream
-        self._width = source.SAMPLE_WIDTH
-        self._chunk = source.CHUNK
-        self._per_second = source.SAMPLE_RATE / source.CHUNK
-        self.levels = collections.deque(levels, maxlen=max(1, int(NOISE_WINDOW * self._per_second)))
-
-    def read(self, size):
-        buffer = self._stream.read(size)
-        if buffer:
-            self.levels.append(audioop.rms(buffer, self._width))
-        return buffer
-
-    def measure(self, seconds):
-        for _ in range(max(1, round(seconds * self._per_second))):
-            self.read(self._chunk)
-
-    def skip(self, seconds):
-        for _ in range(max(1, round(seconds * self._per_second))):
-            self._stream.read(self._chunk)
-
-    def close(self):
-        self._stream.close()
-
-
-def _threshold(levels):
-    """The loudness that counts as speech: twice the room's level, read from low down.
-
-    A door, the television, or the commands themselves only fill the top of the range, so they
-    cannot lift the threshold above a quieter voice, and they leave the window within
-    NOISE_WINDOW seconds.
-    """
-    if not levels:
-        return MIN_THRESHOLD
-    ordered = sorted(levels)
-    return max(MIN_THRESHOLD, ordered[int(len(ordered) * NOISE_PERCENTILE)] * SPEECH_RATIO)
+    def put(self, item, block=True, timeout=None):
+        if isinstance(item, tuple):
+            samples = item[0]
+            self._on_level(float((samples * samples).mean()) ** 0.5 if len(samples) else 0.0)
+        super().put(item, block, timeout)
 
 
 # -- the listener ----------------------------------------------------------------------
@@ -190,33 +157,32 @@ def _threshold(levels):
 class Listener:
     """Listens on the microphone and hands recognised commands to a callback."""
 
-    def __init__(self, on_command, on_status, on_ready=None, may_listen=None, opens_with_command=None):
+    def __init__(self, on_command, on_status, on_ready=None, opens_with_command=None,
+                 on_partial=None, on_level=None, on_download=None):
         self.on_command = on_command          # on_command(text)
         self.on_status = on_status            # on_status(text, transient=False)
         self.on_ready = on_ready              # on_ready(listener), once, when the microphone first opens
-        self.may_listen = may_listen          # whether to listen right now: "only when in focus"
         self.opens_with_command = opens_with_command   # lets a guessed wake word count; see find_command
+        self.on_partial = on_partial          # on_partial(text): a command still being said
+        self.on_level = on_level              # on_level(0..1): how loud the microphone is
+        self.on_download = on_download        # on_download(0..1): first-launch download progress
 
-        self._recognizer = sr.Recognizer()
-        self._recognizer.dynamic_energy_threshold = False   # it sinks; see _Meter
-        self._source = None
-        self._meter = None
-        self._levels = ()
-        self._voice_spoke = False
-        self._running = False       # the loop is listening, so pause/resume may set the status
-        self._in_setup = False
-        self._warned_unavailable = False
-        self._logged_status = None
-
+        self._mic = None
+        self._keyterm = None
+        self._lines = queue.Queue()   # finished lines, or the exception that broke the microphone
         self._typed = queue.Queue()
-        self._wanted = threading.Event()   # push-to-talk was pressed
         self._stop = threading.Event()
-        self._active = threading.Event()   # cleared while the voice speaks
-        self._active.set()
+        self._reopen = threading.Event()
+        self._expecting = False       # listen_once() is waiting: show everything heard
+        self._vocabulary = True       # see use_vocabulary()
+        self._last_partial = 0.0      # when text of a line still being said last arrived
+        self._in_setup = False
+        self._running = False         # the loop is listening, so pause/resume may set the status
+        self._logged_status = None
 
     def _status(self, text, transient=False):
         """Report a status, and log each change -- not the pause around every reply."""
-        if not transient and text not in ("Paused", self._logged_status):
+        if not transient and text not in ("Speaking", self._logged_status):
             self._logged_status = text
             log.info("[%s]", text)
         self.on_status(text, transient)
@@ -224,13 +190,16 @@ class Listener:
     # -- called from other threads --
 
     def pause(self):
-        self._active.clear()
-        self._voice_spoke = True
+        """The voice is about to talk: stop hearing until it is done."""
+        if self._mic is not None:
+            self._mic.mute(True)
         if self._running:
-            self._status("Paused")
+            self._status("Speaking")
 
     def resume(self):
-        self._active.set()
+        time.sleep(SETTLE_SECONDS)
+        if self._mic is not None:
+            self._mic.mute(False)
         if self._running:
             self._status("Listening")
 
@@ -241,52 +210,71 @@ class Listener:
         """Run a typed command as if it had been said; the wake word is optional."""
         self._typed.put(text)
 
-    def request_listen(self):
-        """Push-to-talk: listen for one command without the wake word, even when unfocused."""
-        self._wanted.set()
+    def reopen(self):
+        """Close the microphone and open it again: a different one was chosen."""
+        self._reopen.set()
 
     # -- the loop --
 
     def run(self):
-        """Listen until stop(), reopening the microphone after focus returns or it fails."""
-        recognizer.start()
+        """Get the models, open the microphone, and listen until stop()."""
+        threading.Thread(target=models.prepare, args=(self._downloading, self._download_failed),
+                         daemon=True, name="download").start()
+        while not models.ready(0.2):   # typed commands still work meanwhile
+            if self._stop.is_set():
+                return
+            self._run_typed()
 
-        spec = settings.get("hotkey")
-        if spec and not win.hotkey(spec, self.request_listen):
-            detail(f"(I couldn't use {spec} as the push-to-talk key: another program has it, "
-                   "or it isn't a key combination.)")
-
+        path, arch = models.speech_model()
         if not settings.is_first_run():   # the setup conversation says its own hello
             say(_greeting())
-            speech.wait()
 
         failures = 0
-        while self._wait_until_allowed():
+        while not self._stop.is_set():
             try:
-                with _microphone() as source:
-                    self._session(source, calibrate=self._meter is None or failures > 0)
+                self._session(path, arch, retrying=failures > 0)
                 failures = 0
             except Exception as e:
                 failures += 1
                 self._lost(e, failures)
 
-    def _session(self, source, calibrate):
-        """Everything done while the microphone is open."""
-        global _current
-        self._meter = _Meter(source, self._levels)
-        source.stream = self._meter   # closed by the Microphone on the way out, through the meter
-        self._source, _current = source, self
-        try:
-            if calibrate:
-                self._status("Calibrating for background noise...")
-                self._settle()
-                self._meter.measure(CALIBRATE_SECONDS)
-            self._recognizer.energy_threshold = _threshold(self._meter.levels)
+    def _downloading(self, fraction):
+        if self.on_download is not None:
+            self.on_download(fraction)
+        self._status("Downloading" if fraction < 1 else "Getting ready")
 
+    def _download_failed(self, error, first):
+        self._status("Can't download")
+        if first:
+            warn("I need the internet once, to download my hearing and my voice. I'll keep trying.")
+            detail(f"({error})")
+
+    def _session(self, path, arch, retrying=False):
+        """Everything done while the microphone is open. Raises when it fails."""
+        global _current
+        from moonshine_voice.mic_transcriber import MicTranscriber
+
+        if not retrying:   # while waiting for a microphone, "No microphone" stays up
+            self._status("Getting ready")
+        mic = (MicTranscriber().language(models.LANGUAGE).model_arch(arch).models_from(path)
+               .update_interval(UPDATE_SECONDS).device(settings.get("microphone") or None))
+        mic.on_text(self._partial)
+        mic.on_line(self._finished)
+        mic.on_error(self._lines.put)
+        mic.load()
+        if self.on_level is not None:
+            mic._audio_queue = _LevelTap(self.on_level)   # before start(), which starts its reader
+        self._mic = mic
+        self._update_keyterm()
+        mic.mute(speech.talking())   # the greeting may already be playing
+        try:
+            mic.start()
+            _current = self
             if self.on_ready is not None:
                 ready, self.on_ready = self.on_ready, None
                 self._in_setup = True
-                self._status(SETUP)
+                if settings.is_first_run():   # otherwise there is nothing to set up
+                    self._status(SETUP)
                 try:
                     ready(self)
                 finally:
@@ -297,33 +285,61 @@ class Listener:
             self._loop()
         finally:
             self._running = False
-            self._levels = self._meter.levels
-            self._source = _current = None
+            _current = self._mic = None
+            mic.close()
+
+    def _finished(self, line):
+        if RECORD_TO and line.audio_data:
+            _record(line)
+        self._lines.put(line.text)
+
+    def use_vocabulary(self, on):
+        """Lean towards the app's vocabulary (on), or towards ordinary speech: dictation, where the
+        names of commands and apps would come out capitalised mid-sentence."""
+        self._vocabulary = on
+        if self._mic is not None:
+            self._update_keyterm()
+
+    def _update_keyterm(self):
+        """Lean the recogniser towards what is said to this app: the wake word, which may be an
+        unusual word ("jarvis"), the commands, and the apps' names. On recordings of a real,
+        accented voice this took the right command from 83% to 91% of the time."""
+        terms = [settings.get("prefix")] + (vocabulary() if self._vocabulary else [])
+        if terms != self._keyterm:
+            self._keyterm = terms
+            self._mic.set_keyterms(terms)
 
     def _loop(self):
-        """Listen and hand each command on, until stopped or listening stops being allowed."""
         while not self._stop.is_set():
-            self._run_typed()
-            if self._wanted.is_set():
-                self._wanted.clear()
-                self._command_without_wake_word()
-                continue
-            if not self._active.is_set():
-                time.sleep(0.1)
-                continue
-            if not self._allowed():
+            if self._reopen.is_set():
+                self._reopen.clear()
                 return
-
-            try:
-                audio = self._listen(LISTEN_TIMEOUT)
-            except sr.WaitTimeoutError:
-                continue
-            text = None if self._stop.is_set() else self._recognise(audio)
+            self._run_typed()
+            text = self._next_line(0.1)
             if text:
                 self._heard(text)
+                self._update_keyterm()   # `customize` may have changed it
+
+    def _next_line(self, timeout):
+        """The next finished line, or None after timeout. Raises what broke the microphone."""
+        try:
+            item = self._lines.get(timeout=timeout)
+        except queue.Empty:
+            return None
+        if isinstance(item, BaseException):
+            raise item
+        return item.strip()
+
+    def _partial(self, text):
+        """A line still being said. Shown only once it is a command, or while an answer is
+        expected: everything else heard is nobody's business."""
+        self._last_partial = time.monotonic()
+        if self.on_partial is not None and (self._expecting or _after_prefix(text.strip(), settings.get("prefix"))
+                                            is not None):
+            self.on_partial(text)
 
     def _heard(self, text):
-        prefix = settings.get("prefix")   # read every time: `customize` can change it
+        prefix = settings.get("prefix")
         command, heard_as = find_command(text, prefix, self.opens_with_command)
         if command is None:
             # Shown so that a misheard wake word looks different from a microphone hearing nothing.
@@ -334,15 +350,16 @@ class Listener:
         if heard_as:
             detail(f"(heard '{heard_as}', taking it as '{prefix}')")
         if command:
+            speech.beep_heard()   # plays while the reply is still being put into words
             self.on_command(command)
         else:
-            self._command_without_wake_word()   # the wake word on its own
+            self._command_without_wake_word()
 
     def _command_without_wake_word(self):
-        """Answer "Yes?" and take the next thing said as the command."""
-        say("Yes?")
-        speech.wait()
-        text = self.listen_once(timeout=5)
+        """The wake word on its own: chime, and take the next thing said as the command -- which
+        may already be on its way, so nothing waits for the chime and nothing heard is dropped."""
+        speech.beep_heard()
+        text = self.listen_once(timeout=5, fresh=False)
         if text:
             self._run_text(text)
 
@@ -352,6 +369,7 @@ class Listener:
                 text = self._typed.get_nowait()
             except queue.Empty:
                 return
+            speech.stop_talking()   # a new command interrupts whatever is being said
             self._run_text(text)
 
     def _run_text(self, text):
@@ -361,95 +379,45 @@ class Listener:
         if command:
             self.on_command(command)
 
-    def _wait_until_allowed(self):
-        """Wait, microphone closed, until listening is allowed. False once stopped."""
-        said = False
-        while not self._stop.is_set():
-            self._run_typed()
-            if self._wanted.is_set() or self._allowed():
-                return True
-            if not said:
-                said = True
-                self._status("Not in focus")
-            time.sleep(0.2)
-        return False
-
     def _lost(self, error, failures):
         """The microphone is missing or stopped: say so once, then wait before trying again."""
         log.error("Microphone: %s", error)
         if failures == 1:
-            if self._meter is None:
-                self._status("No microphone found")
-                warn("I could not open a microphone. Plug one in and I'll pick it up.")
-                detail("If one is plugged in, check Windows Settings > Privacy & security > Microphone "
-                       "lets apps use it.")
-            else:
-                self._status("Microphone stopped")
-                warn("The microphone stopped working. I'll keep trying to reconnect.")
-            detail(f"({error})")
+            self._status("No microphone")
+            warn("I can't hear anything: no microphone is working. Plug one in and I'll pick it up.")
+            detail("If one is plugged in, check Windows Settings > Privacy & security > Microphone "
+                   f"lets apps use it. ({error})")
 
         until = time.monotonic() + RETRY_SECONDS
         while time.monotonic() < until and not self._stop.is_set():
             self._run_typed()
             time.sleep(0.2)
 
-    def _allowed(self):
-        if self.may_listen is None:
-            return True
-        try:
-            return bool(self.may_listen())
-        except Exception:
-            return True   # a broken gate must never leave the app deaf
+    def listen_once(self, timeout=ANSWER_TIMEOUT, fresh=True):
+        """The next line said, with no wake word needed, or None. For a command or the setup
+        conversation, which run on this thread while the microphone is open.
 
-    def _settle(self):
-        """Let the voice's last words clear the microphone -- only if it just spoke, or dictation,
-        which listens again the moment a line is typed, would lose the start of each sentence."""
-        if self._voice_spoke:
-            self._voice_spoke = False
-            self._meter.skip(SETTLE_SECONDS)
-
-    def _listen(self, timeout, phrase_limit=PHRASE_LIMIT):
-        """Capture one phrase, then re-read the room's level. Raises what listen() raises."""
-        self._settle()
-        try:
-            return self._recognizer.listen(self._source, timeout=timeout, phrase_time_limit=phrase_limit)
-        finally:
-            self._recognizer.energy_threshold = _threshold(self._meter.levels)
-
-    def _recognise(self, audio):
-        """The text in a clip, or None: unintelligible, or nothing can recognise speech (said once)."""
-        try:
-            text = recognizer.transcribe(self._recognizer, audio)
-        except sr.UnknownValueError:
-            self._status("Didn't catch that", transient=True)   # a cough, music, a door
-            return None
-        except sr.RequestError as e:
-            self._status("Can't recognise speech", transient=True)
-            if not self._warned_unavailable:
-                self._warned_unavailable = True
-                warn("I can't recognise speech right now.")
-                detail(f"({e})")
-            return None
-        except Exception as e:
-            log.exception("Recognition failed")
-            detail(f"Something went wrong recognising that: {e}")
+        fresh: lines finished before now were said before the question, so are not its answer.
+        """
+        if self._mic is None:
             return None
 
-        self._warned_unavailable = False
-        return text
-
-    def listen_once(self, timeout=ANSWER_TIMEOUT, phrase_limit=PHRASE_LIMIT):
-        """One utterance with no wake word needed, or None. For a command or the setup
-        conversation, which run on this thread while the microphone is open."""
-        if self._source is None:
-            return None
+        while fresh and not self._lines.empty():
+            self._next_line(0)
 
         self._status("Listening")   # the only cue that it is the user's turn
+        self._expecting = True
         try:
-            audio = self._listen(timeout, phrase_limit)
-        except sr.WaitTimeoutError:
+            # Past the timeout, an answer already being said still gets to finish.
+            until, latest = time.monotonic() + timeout, time.monotonic() + timeout + LONGEST_LINE
+            while time.monotonic() < latest:
+                text = self._next_line(0.2)
+                if text:
+                    return text
+                if time.monotonic() > until and time.monotonic() - self._last_partial > 1:
+                    return None
             return None
         finally:
+            self._expecting = False
             if self._in_setup:
                 self._status(SETUP)
-        return self._recognise(audio)

@@ -40,6 +40,8 @@ ArchitecturesAllowed=x64compatible
 MinVersion=10.0
 
 SetupMutex={#AppName}Setup,Global\{#AppName}Setup
+; The mutex the running app holds (win.first_instance), so setup knows to ask for it to be closed.
+AppMutex=Hard2AssistRunning
 ; Restart Manager notices Hard2Assist running and offers to close it, rather than failing
 ; halfway through with files in use.
 CloseApplications=yes
@@ -68,7 +70,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 
 [Messages]
-WelcomeLabel2=This will install [name/ver] on your computer.%n%nHard2Assist listens for a wake word and then opens programs and websites, moves and closes windows, types for you, controls the volume, and answers questions about your PC out loud.%n%nIt needs a microphone. Speech is recognised on your PC, so it works offline and nothing you say leaves it.
+WelcomeLabel2=This will install [name/ver] on your computer.%n%nHard2Assist sits at the top of your screen and listens for a wake word, then opens programs and websites, moves and closes windows, types for you, controls the volume, and answers questions about your PC out loud.%n%nIt needs a microphone. The first time it starts, it downloads its hearing and its voice (about 400 MB, once); after that it works offline, and nothing you say ever leaves your PC.
 
 
 [Tasks]
@@ -85,7 +87,11 @@ Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
-Name: "{autostartup}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: startup
+
+
+[Registry]
+; The same value the dock's "Start when Windows starts" switch writes (win.set_starts_with_windows).
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"""; Flags: uninsdeletevalue; Tasks: startup
 
 
 [Run]
@@ -94,31 +100,42 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags
 
 [UninstallDelete]
 ; Written after installation, so the uninstaller does not know about them: comtypes generates its
-; SAPI wrapper on first run, into the app folder when writable and into %TEMP% when not.
+; COM wrappers on first use, into the app folder when writable and into %TEMP% when not.
 Type: filesandordirs; Name: "{app}\_internal\comtypes\gen"
 Type: filesandordirs; Name: "{%TEMP}\comtypes_cache\{#AppName}-*"
 Type: dirifempty; Name: "{app}"
 
 
 [Code]
-{ The user's own files live in %APPDATA%\Hard2Assist, apart from the installation, so the
+{ The user's own files live apart from the installation -- settings and saved apps in
+  %APPDATA%\Hard2Assist, the downloaded hearing and voice in %LOCALAPPDATA%\Hard2Assist -- so the
   uninstaller asks before removing them, defaulting to keep. SuppressibleMsgBox, not MsgBox: a
-  /VERYSILENT uninstall would otherwise hang on a dialog nobody can see; this one answers IDNO. }
+  /VERYSILENT uninstall would otherwise hang on a dialog nobody can see; this one answers IDNO.
+
+  The start-with-Windows value goes either way: the dock's switch can have written it even when
+  the installer did not, and it would point at a program that is gone. }
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  DataDir: String;
+  DataDir, ModelDir: String;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+    RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#AppName}');
+
     DataDir := ExpandConstant('{userappdata}\{#AppName}');
-    if DirExists(DataDir) then
+    ModelDir := ExpandConstant('{localappdata}\{#AppName}');
+    if DirExists(DataDir) or DirExists(ModelDir) then
     begin
-      if SuppressibleMsgBox('Also remove your Hard2Assist settings?' + #13#10#13#10 +
-                            'This is your wake word, how it listens, the apps and websites you ' +
-                            'added, any commands you added, and the log.' + #13#10#13#10 +
+      if SuppressibleMsgBox('Also remove your Hard2Assist settings and downloads?' + #13#10#13#10 +
+                            'This is your wake word and voice, the apps and websites you added, ' +
+                            'any commands you added, the log, and the downloaded hearing and voice ' +
+                            '(about 400 MB).' + #13#10#13#10 +
                             'Choose No to keep them for a future reinstall.',
                             mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
+      begin
         DelTree(DataDir, True, True, True);
+        DelTree(ModelDir, True, True, True);
+      end;
     end;
   end;
 end;

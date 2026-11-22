@@ -30,7 +30,7 @@ def desktop(monkeypatch):
     monkeypatch.setattr(win, "foreground", lambda: state["front"])
     monkeypatch.setattr(win, "foreground_is_ours", lambda: state["front"] == OURS)
     monkeypatch.setattr(win, "foreground_title",
-                        lambda: {TERMINAL: "✳ claude code", OURS: "Hard2Assist"}.get(state["front"], ""))
+                        lambda: {TERMINAL: "\u2733 claude code", OURS: "Hard2Assist"}.get(state["front"], ""))
     monkeypatch.setattr(session, "FOCUS_SETTLE", 0)
     monkeypatch.setattr(session, "_last", None)
     monkeypatch.setattr(output, "_sink", lambda text, tag=None: state["said"].append(text))
@@ -94,7 +94,7 @@ def test_dictation_finds_its_app_again_before_every_line(commands, monkeypatch):
 
 @pytest.mark.parametrize("heard, text", [
     ('"hello".', "hello"),
-    ("“hello there”", "hello there"),
+    ("\u201chello there\u201d", "hello there"),
     ("hello there.", "hello there."),
     ('"a" and "b"', '"a" and "b"'),
 ])

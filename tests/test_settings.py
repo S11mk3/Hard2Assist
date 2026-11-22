@@ -20,13 +20,13 @@ def test_a_hand_edited_wake_word_is_cleaned_up():
 
 
 def test_bad_values_fall_back_to_defaults_one_at_a_time():
-    _saved({"prefix": "ok", "listen_when": "sometimes", "recognizer": "google",
-            "voice_rate": 99, "hotkey": 5, "unknown": 1})
+    _saved({"prefix": "ok", "voice": "piper_en_US-ryan-high", "speed": 9, "microphone": 3,
+            "listen_when": "focused", "unknown": 1})
     assert settings.get("prefix") == "computer"
-    assert settings.get("listen_when") == "always"
-    assert settings.get("recognizer") == "google"
-    assert settings.get("voice_rate") == 10
-    assert settings.get("hotkey") == "ctrl+alt+space"
+    assert settings.get("voice") == "kokoro_am_fenrir"
+    assert settings.get("speed") == settings.SPEED[1]
+    assert settings.get("microphone") == ""
+    assert "listen_when" not in settings.load()   # a setting from 1.x is dropped, not an error
 
 
 def test_a_broken_file_gives_the_defaults():

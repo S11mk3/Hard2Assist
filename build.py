@@ -2,12 +2,12 @@
 
     python build.py               # dist/Hard2Assist/ -- the app folder
     python build.py --installer   # ...and wrap it in installer/Hard2Assist-Setup.exe
-    python build.py --fetch-model # only download the speech model into models/,
-                                  # which running from source needs too
 
 A folder with the .exe and the Python runtime beside it, not a single self-extracting .exe: that
 unpacks the whole bundle into %TEMP% on every launch, which costs seconds and looks to antivirus
 like a dropper. The installer built from the folder is the single file to hand out.
+
+The speech model and the voice are not bundled: the app downloads them on first launch.
 """
 
 import ast
@@ -19,7 +19,6 @@ import subprocess
 import sys
 import time
 
-from storage import MODEL
 from version import AUTHOR, NAME, VERSION
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,26 +26,23 @@ ICON = "H2A.ico"
 VERSION_FILE = "version_info.txt"
 INSTALLER_SCRIPT = "installer.iss"
 
-# Modules PyInstaller finds by static analysis that never run. SpeechRecognition supports a dozen
-# recognisers and PyInstaller packs all their dependencies; Hard2Assist only uses sr.Microphone
-# and recognize_google (pure standard library underneath) and Moonshine (a native library through
-# ctypes). Notably: numpy is only reached from recognisers and Moonshine classes not used here;
-# vosk drags in matplotlib and Qt (110 MB) through tqdm.gui, so those are named outright.
-#
-# comtypes.tools must NOT be excluded: it generates the SAPI wrapper on first run, and without it
-# the voice never starts.
-EXCLUDES = [
-    "numpy", "setuptools", "distutils", "pkg_resources", "PIL", "yaml",
-    "requests", "h2", "hpack", "hyperframe",          # Google is reached through urllib
-    "sounddevice", "tqdm", "filelock",                 # Moonshine's own capture and downloader
-    "pocketsphinx", "vosk", "matplotlib", "PySide6", "shiboken6", "PyQt5", "PyQt6",
-    "unittest", "pydoc", "pytest",
-]
+# Modules PyInstaller would find but that never run. requests, tqdm and filelock must stay:
+# Moonshine's downloader uses all three on first launch. comtypes.tools must stay too: it builds
+# the COM wrappers the volume control and the Store app list need, on first use.
+EXCLUDES = ["tkinter", "setuptools", "distutils", "pkg_resources", "PIL", "yaml", "matplotlib",
+            "PyQt5", "PyQt6", "unittest", "pydoc", "pytest", "speech_recognition"]
 
-# Data collected because it sits inside a package, which --exclude-module cannot reach, so it is
-# deleted after the build: CMU Sphinx's 38 MB of models (recognize_sphinx only), and the Linux and
-# macOS FLAC encoders. flac-win32.exe stays -- the Google fallback encodes every clip with it.
-UNUSED_PAYLOAD = ("pocketsphinx-data", "flac-linux", "flac-mac")
+# Moonshine's package holds 8 MB of sample recordings and a test model; only its two beeps are used.
+_MOONSHINE = os.path.dirname(importlib.util.find_spec("moonshine_voice").origin) \
+    if importlib.util.find_spec("moonshine_voice") else ""
+BEEPS = [os.path.join(_MOONSHINE, "assets", name) for name in ("success.wav", "error.wav")]
+
+# Parts of Qt collected for features the dock never uses, deleted after the build: the software
+# OpenGL fallback (20 MB; the dock paints without OpenGL), Qt's own translations, platform plugins
+# other than Windows', and networking plugins (downloads go through Python, not Qt).
+UNUSED = ["PySide6/opengl32sw.dll", "PySide6/translations", "PySide6/plugins/tls",
+          "PySide6/plugins/networkinformation", "PySide6/plugins/platforms/qdirect2d.dll",
+          "PySide6/plugins/platforms/qminimal.dll", "PySide6/plugins/platforms/qoffscreen.dll"]
 
 OPTIONS = [
     "--onedir",
@@ -61,7 +57,7 @@ OPTIONS = [
     # Commands are found on disk at runtime, so they ship as data; what they import is added by
     # command_imports() below.
     "--add-data", f"commands{os.pathsep}commands",
-    # Speech and volume talk to Windows over COM, and comtypes.gen is generated at runtime.
+    # Volume and the Store app list talk to Windows over COM; comtypes.gen is generated at runtime.
     "--hidden-import", "comtypes",
     "--hidden-import", "comtypes.stream",
     "--hidden-import", "comtypes.client",
@@ -69,8 +65,9 @@ OPTIONS = [
     "--hidden-import", "pycaw.utils",
     # moonshine.dll and the onnxruntime.dll it loads from beside itself.
     "--collect-binaries", "moonshine_voice",
-    "--add-data", f"{os.path.join('models', MODEL)}{os.pathsep}models/{MODEL}",
 ]
+for beep in BEEPS:
+    OPTIONS += ["--add-data", f"{beep}{os.pathsep}moonshine_voice/assets"]
 for module in EXCLUDES:
     OPTIONS += ["--exclude-module", module]
 
@@ -129,52 +126,18 @@ def folder_size(folder):
                for root, _dirs, files in os.walk(folder) for name in files)
 
 
-def strip_unused_payload(folder):
-    """Delete what UNUSED_PAYLOAD names. Returns the bytes freed."""
+def prune(app_dir):
+    """Delete what UNUSED names. Returns the bytes freed."""
     freed = 0
-    for root, dirs, files in os.walk(folder, topdown=False):
-        for name in files + dirs:
-            if name.startswith(UNUSED_PAYLOAD):
-                path = os.path.join(root, name)
-                if os.path.isdir(path):
-                    freed += folder_size(path)
-                    shutil.rmtree(path)
-                else:
-                    freed += os.path.getsize(path)
-                    os.remove(path)
+    for relative in UNUSED:
+        path = os.path.join(app_dir, "_internal", *relative.split("/"))
+        if os.path.isdir(path):
+            freed += folder_size(path)
+            shutil.rmtree(path)
+        elif os.path.isfile(path):
+            freed += os.path.getsize(path)
+            os.remove(path)
     return freed
-
-
-def fetch_model():
-    """Put the speech model in models/, downloading it the first time. Returns its folder or None.
-
-    Downloaded into models/.download and renamed into place once complete, so an interrupted
-    fetch never leaves a half model that looks finished. Not into Moonshine's default cache under
-    %LOCALAPPDATA%, which the Microsoft Store's Python redirects, breaking the downloader.
-    """
-    target = os.path.join(HERE, "models", MODEL)
-    if os.path.isdir(target) and os.listdir(target):
-        return target
-
-    try:
-        from moonshine_voice import ModelArch, get_model_for_language
-    except ImportError:
-        print("moonshine-voice is not installed. Run: pip install -r requirements.txt")
-        return None
-
-    print(f"Fetching the speech model ({MODEL})...")
-    download = os.path.join(HERE, "models", ".download")
-    try:
-        source, _arch = get_model_for_language("en", ModelArch.SMALL_STREAMING, cache_root=download)
-    except Exception as e:
-        print(f"Could not download the speech model: {e}")
-        return None
-
-    shutil.rmtree(target, ignore_errors=True)   # an empty leftover
-    os.replace(source, target)
-    shutil.rmtree(download, ignore_errors=True)
-    print(f"Speech model ready in {target}")
-    return target
 
 
 def find_inno():
@@ -233,17 +196,15 @@ def clean(path):
 
 
 def main():
-    if "--fetch-model" in sys.argv:
-        return 0 if fetch_model() else 1
-
     # The PyInstaller of the Python running this, so the build uses this environment's packages.
     if importlib.util.find_spec("PyInstaller") is None:
         print("PyInstaller is not installed. Run: pip install -r requirements-build.txt")
         return 1
+    if not _MOONSHINE:
+        print("moonshine-voice is not installed. Run: pip install -r requirements-build.txt")
+        return 1
     if not os.path.isfile(os.path.join(HERE, ICON)):
         print(f"{ICON} is missing -- the .exe would get the default icon.")
-        return 1
-    if fetch_model() is None:   # bundled, so the installed app works offline from the start
         return 1
 
     for stale in ("build", "dist", "installer"):
@@ -261,12 +222,11 @@ def main():
         print(f"\nThe build finished but {NAME}.exe is missing.")
         return 1
 
-    freed = strip_unused_payload(app_dir)
-    if freed:
-        print(f"\nRemoved {freed / 1024 ** 2:.0f} MB of unused bundled data.")
+    freed = prune(app_dir)
+    print(f"\nRemoved {freed / 1024 ** 2:.0f} MB of unused Qt parts.")
     print(f"\nBuilt {app_dir} ({folder_size(app_dir) / 1024 ** 2:.0f} MB)")
-    print("Open Hard2Assist.exe inside it and say `computer help` -- seeing every command listed is")
-    print("how you know nothing was excluded by mistake.")
+    print("Open Hard2Assist.exe inside it and type `help` into the dock -- seeing every command")
+    print("listed is how you know nothing was excluded by mistake.")
 
     if "--installer" in sys.argv:
         setup = build_installer(app_dir)

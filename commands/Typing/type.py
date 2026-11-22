@@ -28,7 +28,7 @@ For more than a sentence or two, say "dictate" instead and just talk.\
 
 # The recogniser quotes words it hears as quoted: 'type "hello".'. One quoted span, and nothing
 # but sentence punctuation after it, is the text to type.
-_QUOTED = re.compile(r'\s*["“]([^"“”]*)["”][.!?]?\s*')
+_QUOTED = re.compile(r'\s*["\u201c]([^"\u201c\u201d]*)["\u201d][.!?]?\s*')
 
 
 def unquoted(text):

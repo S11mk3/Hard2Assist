@@ -43,21 +43,6 @@ def test_wake_word_in_an_answer(commands, answer, word):
     assert wizard.wake_word_in(answer) == word
 
 
-@pytest.mark.parametrize("answer, when", [
-    ("always", "always"),
-    ("all the time", "always"),
-    ("focus", "focused"),
-    ("only when in focus", "focused"),
-    # Both kinds of word: the focus one is what was meant.
-    ("only when ah not always", "focused"),
-    ("not always", "focused"),
-    ("always even when the window is minimised", "always"),
-    ("banana", None),
-])
-def test_when_to_listen(answer, when):
-    assert wizard.listen_when_in(answer) == when
-
-
 class _Ears:
     def __init__(self, *answers):
         self.answers = list(answers)

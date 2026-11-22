@@ -4,10 +4,13 @@ An app's windows are found by enumerating on demand rather than by remembered ha
 recycles handles, so a stored one can end up pointing at an unrelated window.
 """
 
+import contextlib
 import ctypes
 import os
 import re
+import sys
 import threading
+import winreg
 from ctypes import wintypes as w
 
 import psutil
@@ -41,6 +44,10 @@ class _GUID(ctypes.Structure):
     _fields_ = [("Data1", w.DWORD), ("Data2", w.WORD), ("Data3", w.WORD), ("Data4", ctypes.c_ubyte * 8)]
 
 
+class _MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", w.DWORD), ("rcMonitor", w.RECT), ("rcWork", w.RECT), ("dwFlags", w.DWORD)]
+
+
 ENUM_WINDOWS_PROC = ctypes.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
 
 
@@ -63,14 +70,25 @@ _api(user32, "PostMessageW", w.BOOL, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
 _api(user32, "ShowWindow", w.BOOL, w.HWND, ctypes.c_int)
 _api(user32, "BringWindowToTop", w.BOOL, w.HWND)
 _api(user32, "SetForegroundWindow", w.BOOL, w.HWND)
+_api(user32, "AllowSetForegroundWindow", w.BOOL, w.DWORD)
 _api(user32, "AttachThreadInput", w.BOOL, w.DWORD, w.DWORD, w.BOOL)
 _api(user32, "SendInput", w.UINT, w.UINT, ctypes.POINTER(_INPUT), ctypes.c_int)
 _api(user32, "OpenClipboard", w.BOOL, w.HWND)
 _api(user32, "CloseClipboard", w.BOOL)
 _api(user32, "GetClipboardData", w.HANDLE, w.UINT)
-_api(user32, "RegisterHotKey", w.BOOL, w.HWND, ctypes.c_int, w.UINT, w.UINT)
-_api(user32, "GetMessageW", w.BOOL, ctypes.POINTER(w.MSG), w.HWND, w.UINT, w.UINT)
+_api(user32, "GetWindowLongPtrW", ctypes.c_ssize_t, w.HWND, ctypes.c_int)
+_api(user32, "SetWindowLongPtrW", ctypes.c_ssize_t, w.HWND, ctypes.c_int, ctypes.c_ssize_t)
+_api(user32, "GetWindowRect", w.BOOL, w.HWND, ctypes.POINTER(w.RECT))
+_api(user32, "MonitorFromWindow", w.HMONITOR, w.HWND, w.DWORD)
+_api(user32, "GetMonitorInfoW", w.BOOL, w.HMONITOR, ctypes.POINTER(_MONITORINFO))
 _api(kernel32, "GetCurrentThreadId", w.DWORD)
+_api(kernel32, "SetThreadExecutionState", w.DWORD, w.DWORD)
+_api(kernel32, "CreateMutexW", w.HANDLE, w.LPVOID, w.BOOL, w.LPCWSTR)
+_api(kernel32, "CreateEventW", w.HANDLE, w.LPVOID, w.BOOL, w.BOOL, w.LPCWSTR)
+_api(kernel32, "OpenEventW", w.HANDLE, w.DWORD, w.BOOL, w.LPCWSTR)
+_api(kernel32, "SetEvent", w.BOOL, w.HANDLE)
+_api(kernel32, "WaitForSingleObject", w.DWORD, w.HANDLE, w.DWORD)
+_api(kernel32, "CloseHandle", w.BOOL, w.HANDLE)
 _api(kernel32, "GlobalLock", w.LPVOID, w.HGLOBAL)
 _api(kernel32, "GlobalUnlock", w.BOOL, w.HGLOBAL)
 _api(shell32, "IsUserAnAdmin", w.BOOL)
@@ -81,8 +99,8 @@ _api(ole32, "CoTaskMemFree", None, ctypes.c_void_p)
 _api(dwmapi, "DwmGetWindowAttribute", ctypes.c_long, w.HWND, w.DWORD, ctypes.c_void_p, w.DWORD)
 
 WM_CLOSE = 0x0010
-WM_HOTKEY = 0x0312
 ERROR_ACCESS_DENIED = 5
+ERROR_ALREADY_EXISTS = 183
 CF_UNICODETEXT = 13
 DWMWA_CLOAKED = 14
 SW_MAXIMIZE = 3
@@ -91,7 +109,7 @@ SW_RESTORE = 9     # undoes minimised and maximised alike
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_UNICODE = 0x0004
-MOD_NOREPEAT = 0x4000
+MONITOR_DEFAULTTONEAREST = 2
 
 VK_RETURN = 0x0D
 VK_CONTROL = 0x11
@@ -99,13 +117,8 @@ VK_LWIN = 0x5B
 VK_SNAPSHOT = 0x2C
 VK_VOLUME_MUTE, VK_VOLUME_DOWN, VK_VOLUME_UP = 0xAD, 0xAE, 0xAF
 
-# Spoken modifier names: (virtual key, RegisterHotKey flag).
-MODIFIERS = {
-    "control": (VK_CONTROL, 0x2), "ctrl": (VK_CONTROL, 0x2),
-    "shift": (0x10, 0x4),
-    "alt": (0x12, 0x1),
-    "windows": (VK_LWIN, 0x8), "win": (VK_LWIN, 0x8),
-}
+# Spoken names of the keys held down in a chord.
+MODIFIERS = {"control": VK_CONTROL, "ctrl": VK_CONTROL, "shift": 0x10, "alt": 0x12, "windows": VK_LWIN, "win": VK_LWIN}
 
 # Spoken key names. Letters and digits are their own names.
 KEYS = {
@@ -344,7 +357,7 @@ def parse_keys(spoken):
     words = spoken.lower().replace("+", " ").replace("-", " ").split()
     keys = []
     while words and words[0] in MODIFIERS:
-        keys.append(MODIFIERS[words.pop(0)][0])
+        keys.append(MODIFIERS[words.pop(0)])
 
     key = re.sub(r"^f (\d+)$", r"f\1", " ".join(words))   # "F 5" -> "f5"
     if key in KEYS:
@@ -356,34 +369,96 @@ def parse_keys(spoken):
     return tuple(keys)
 
 
-def hotkey(spec, callback):
-    """Call callback, on a thread of its own, whenever the key combination spec is pressed.
+# -- the app itself ----------------------------------------------------------------
 
-    False when spec is not modifiers plus one key, or another program already owns it.
+_INSTANCE = "Hard2AssistRunning"           # the installer looks for this too (AppMutex)
+_SHOW = "Hard2AssistShow"
+_instance = None
+
+
+def first_instance():
+    """Whether no other copy of Hard2Assist is running. The answer holds while this one runs."""
+    global _instance
+    ctypes.set_last_error(0)
+    _instance = kernel32.CreateMutexW(None, False, _INSTANCE)
+    return ctypes.get_last_error() != ERROR_ALREADY_EXISTS
+
+
+def show_first_instance():
+    """Ask the copy that is already running to show itself.
+
+    Windows only lets a program come to the front if the one the user just started passes it the
+    right, which is this one: without that, the panel would open behind whatever is in front.
     """
-    words = spec.lower().replace("+", " ").split()
-    flags = 0
-    while words and words[0] in MODIFIERS:
-        flags |= MODIFIERS[words.pop(0)][1]
-    key = parse_keys(" ".join(words)) if words else None
-    if not flags or key is None or len(key) != 1:
+    user32.AllowSetForegroundWindow(0xFFFFFFFF)   # ASFW_ANY
+    event = kernel32.OpenEventW(0x0002, False, _SHOW)   # EVENT_MODIFY_STATE
+    if event:
+        kernel32.SetEvent(event)
+        kernel32.CloseHandle(event)
+
+
+def on_shown_again(callback):
+    """Call callback, on a thread of its own, whenever a second copy asks this one to show itself."""
+    event = kernel32.CreateEventW(None, False, False, _SHOW)
+
+    def wait():
+        while kernel32.WaitForSingleObject(event, 0xFFFFFFFF) == 0:
+            callback()
+
+    threading.Thread(target=wait, daemon=True, name="second launch").start()
+
+
+_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+
+def starts_with_windows():
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN) as key:
+            winreg.QueryValueEx(key, "Hard2Assist")
+        return True
+    except OSError:
         return False
 
-    registered = threading.Event()
-    result = []
 
-    def listen():
-        # The hotkey belongs to the thread that registers it, and arrives in its message queue.
-        result.append(bool(user32.RegisterHotKey(None, 1, flags | MOD_NOREPEAT, key[0])))
-        registered.set()
-        message = w.MSG()
-        while result[0] and user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
-            if message.message == WM_HOTKEY:
-                callback()
+def set_starts_with_windows(on):
+    """Start the built app at sign-in, or stop doing so. The installer's checkbox writes the same."""
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN, 0, winreg.KEY_SET_VALUE) as key:
+        if on:
+            winreg.SetValueEx(key, "Hard2Assist", 0, winreg.REG_SZ, f'"{sys.executable}"')
+        else:
+            with contextlib.suppress(FileNotFoundError):
+                winreg.DeleteValue(key, "Hard2Assist")
 
-    threading.Thread(target=listen, daemon=True, name="hotkey").start()
-    registered.wait(2)
-    return bool(result and result[0])
+
+def set_no_activate(hwnd, on):
+    """Let clicks on a window leave the keyboard where it was (on), or let it take focus (off)."""
+    GWL_EXSTYLE, WS_EX_NOACTIVATE = -20, 0x08000000
+    style = user32.GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+    user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE if on else style & ~WS_EX_NOACTIVATE)
+
+
+def prevent_sleep(on):
+    """Keep the PC awake while this thread works, or let it sleep again."""
+    kernel32.SetThreadExecutionState(0x80000000 | (0x1 if on else 0))   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+
+
+def fullscreen_in_front():
+    """Whether the window in front fills its whole screen: a game, a video, a slideshow.
+
+    Not a maximised window, which leaves the taskbar, and not the desktop, which always fills it.
+    """
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd or user32.IsZoomed(hwnd) or _class_of(hwnd) in ("Progman", "WorkerW") \
+            or pid_of_window(hwnd) == os.getpid():
+        return False
+
+    window = w.RECT()
+    user32.GetWindowRect(hwnd, ctypes.byref(window))
+    info = _MONITORINFO(cbSize=ctypes.sizeof(_MONITORINFO))
+    user32.GetMonitorInfoW(user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), ctypes.byref(info))
+    screen = info.rcMonitor
+    return (window.left <= screen.left and window.top <= screen.top
+            and window.right >= screen.right and window.bottom >= screen.bottom)
 
 
 # -- everything else -------------------------------------------------------------

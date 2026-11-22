@@ -154,7 +154,7 @@ def command_words():
 
 
 def _clean(token):
-    return token.lower().replace("’", "'").strip(PUNCTUATION)
+    return token.lower().replace("\u2019", "'").strip(PUNCTUATION)
 
 
 def _tokens(utterance):
@@ -256,6 +256,12 @@ def understand(utterance):
     close = difflib.get_close_matches(words[0], guessable, n=1, cutoff=MATCH_CUTOFF)
     if close:
         return close[0], _argument(words[1:], spoken[1:], _verbatim(close[0])), words[0]
+
+    # The recogniser sometimes glues a command onto the next word: "OpenObs Studio".
+    for name in sorted(guessable, key=len, reverse=True):
+        if words[0].startswith(name) and len(words[0]) - len(name) >= 2:
+            name, argument, _ = understand(" ".join([name, spoken[0][len(name):], *spoken[1:]]))
+            return name, argument, words[0]
 
     return None, None, None
 

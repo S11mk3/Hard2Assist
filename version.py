@@ -2,5 +2,5 @@
 read back by `introduce`, so a release changes them here only."""
 
 NAME = "Hard2Assist"
-VERSION = "1.1.0"
+VERSION = "2.0.0"
 AUTHOR = "Andrija Simic"

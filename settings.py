@@ -12,18 +12,14 @@ import storage
 FILE = os.path.join(storage.USER_DIR, "settings.json")
 
 DEFAULTS = {
-    "prefix": "computer",        # the wake word
-    "listen_when": "always",     # "always" | "focused"
-    "recognizer": "auto",        # "auto" | "local" | "google"; see recognizer.py
-    "voice": "",                 # part of a Windows voice's name; "" for the default voice
-    "voice_rate": 0,             # -10 (slowest) to 10 (fastest)
-    "hotkey": "ctrl+alt+space",  # push-to-talk; "" turns it off
+    "prefix": "computer",         # the wake word
+    "voice": "kokoro_am_fenrir",  # a Kokoro voice; see models.voices()
+    "speed": 1.0,                 # how fast the voice talks, from SPEED[0] to SPEED[1]
+    "microphone": "",             # an input device's name; "" for the Windows default
+    "sounds": True,               # a chime on hearing a command, another when something fails
 }
 
-CHOICES = {
-    "listen_when": ("always", "focused"),
-    "recognizer": ("auto", "local", "google"),
-}
+SPEED = (0.7, 1.5)
 
 _values = None
 
@@ -37,10 +33,12 @@ def _clean(key, value):
     """The value as it should be stored, or None if this setting cannot take it."""
     if key == "prefix":
         return value.strip().lower() if isinstance(value, str) and valid_prefix(value) else None
-    if key in CHOICES:
-        return value if value in CHOICES[key] else None
-    if key == "voice_rate":
-        return max(-10, min(10, value)) if type(value) is int else None
+    if key == "speed":
+        return round(max(SPEED[0], min(SPEED[1], value)), 2) if type(value) in (int, float) else None
+    if key == "voice":
+        return value.strip() if isinstance(value, str) and value.startswith("kokoro_") else None
+    if key == "sounds":
+        return value if isinstance(value, bool) else None
     return value.strip() if isinstance(value, str) else None
 
 

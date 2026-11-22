@@ -4,6 +4,7 @@ It runs on the microphone thread, which owns the open microphone, so it listens 
 listener.listen_once() -- and holds that thread, so no other command is heard meanwhile.
 """
 
+import difflib
 import re
 
 import listener
@@ -45,8 +46,11 @@ STOP_PHRASES = ("stop dictating", "stop dictation", "stop typing", "stop")
 # Allowed either side of the phrase: "computer please stop dictating now".
 FILLER = ("please", "now", "just", "can you", "could you", "would you", "you", "i want you to")
 
+# How close a line after the wake word must be to a stop phrase to count as one ("stomptic titting"
+# is 0.73 from "stop dictating"; unrelated words score under 0.5).
+STOP_LIKENESS = 0.65
+
 TIMEOUT = 12        # per sentence: pausing to think is not the end of the dictation
-PHRASE_LIMIT = 20   # a dictated sentence runs longer than a command
 MAX_SILENCE = 3     # silences in a row before it stops by itself: the way out if all else fails
 
 
@@ -63,7 +67,11 @@ def run():
     say(f"Dictating into {target}. Say {settings.get('prefix')} stop dictating when you're done.")
     speech.wait()   # or it hears its own "say computer stop dictating", and stops
 
-    typed = _listen(ears)
+    ears.use_vocabulary(False)   # ordinary speech now, not command and app names
+    try:
+        typed = _listen(ears)
+    finally:
+        ears.use_vocabulary(True)
     say(f"Stopped dictating. {plural(typed, 'line')} typed." if typed else "Stopped dictating.")
 
 
@@ -86,14 +94,27 @@ def _split_stop(heard):
     without a comma left dangling where the phrase came off."""
     heard = heard.strip()
     trimmed = _stop_pattern().sub("", heard).rstrip(" ,").strip()
-    return (trimmed, True) if trimmed != heard else (heard, False)
+    if trimmed != heard:
+        return trimmed, True
+    return ("", True) if _sounds_like_stop(heard) else (heard, False)
+
+
+def _sounds_like_stop(heard):
+    """Whether a line is the wake word and a misheard stop phrase: "Computer, stomptic titting".
+    Only a line that is nothing else, so no dictated sentence can be lost to a guess."""
+    rest = listener.find_command(heard, settings.get("prefix"))[0]
+    if not rest:
+        return False
+    words = " ".join(re.findall(r"[a-z']+", rest.lower()))
+    return any(difflib.SequenceMatcher(None, words, phrase).ratio() >= STOP_LIKENESS
+               for phrase in STOP_PHRASES if phrase != "stop")
 
 
 def _listen(ears):
     """The dictation loop. Returns how many lines were typed."""
     typed = silences = 0
     while True:
-        heard = ears.listen_once(timeout=TIMEOUT, phrase_limit=PHRASE_LIMIT)
+        heard = ears.listen_once(timeout=TIMEOUT)
         if not heard:
             silences += 1
             if silences >= MAX_SILENCE:

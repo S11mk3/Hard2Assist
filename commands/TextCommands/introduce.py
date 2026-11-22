@@ -5,7 +5,7 @@ counts are read live, so the introduction never names a wake word or a number th
 """
 
 import apps
-import recognizer
+import models
 import registry
 import settings
 from output import detail, say
@@ -36,21 +36,14 @@ your settings are kept are written here.\
 """
 
 
-def _listening():
-    """(spoken, written) for how speech is recognised right now: Moonshine can fail to load."""
-    if recognizer.is_local():
-        return "a speech model that runs on this PC", "Moonshine, on this PC, so nothing you say leaves it"
-    return "Google's speech recognition", "Google's free speech API, so I need the internet"
-
-
 def run():
     commands = registry.load()
     total = sum(apps.counts().values())
     prefix = settings.get("prefix")
-    spoken, written = _listening()
+    voice = dict(models.voices()).get(settings.get("voice"), settings.get("voice"))
 
-    say(f"I'm {APP_NAME}, a voice assistant for Windows, made by {AUTHOR}. I'm written in Python: "
-        f"I hear you through {spoken}, and answer in this PC's own Windows voice. "
+    say(f"I'm {APP_NAME}, a voice assistant for Windows, made by {AUTHOR}. I hear you and talk to you "
+        f"entirely on this PC, so nothing you say ever leaves it. "
         f"I know {len(commands)} commands and {total} apps. Say {prefix} help to see them all.")
 
     rows = (
@@ -60,9 +53,9 @@ def run():
         ("What I am", "A voice assistant for Windows"),
         ("Wake word", f"'{prefix}', said before every command"),
         ("I know", f"{len(commands)} commands and {total} apps, folders and websites"),
-        ("Written in", "Python, with a Tk window"),
-        ("Listening", written),
-        ("Speaking", "the Windows voice on this PC, which never leaves it"),
+        ("Written in", "Python, with a Qt dock"),
+        ("Listening", "Moonshine's medium speech model, on this PC"),
+        ("Speaking", f"Kokoro, voice {voice}, on this PC"),
         ("Settings", settings.FILE),
     )
     width = max(len(label) for label, _ in rows)

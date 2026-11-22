@@ -125,3 +125,26 @@ def test_plurals(count, noun, text):
 ])
 def test_wake_word_choices(word, valid):
     assert settings.valid_prefix(word) is valid
+
+
+@pytest.mark.parametrize("text, spoken_text", [
+    ("It's 1:53 am", "It's one fifty-three A M"),
+    ("It's 12:05 pm", "It's twelve oh five P M"),
+    ("It's 8:00 PM", "It's eight o'clock P M"),
+    ("It's 7:30 a.m.", "It's seven thirty A M"),
+    ("at 13:45", "at thirteen forty-five"),
+    ("82 percent, charging.", "82 percent, charging."),
+])
+def test_times_are_written_out_for_the_voice(text, spoken_text):
+    import speech
+    assert speech.speakable(text) == spoken_text
+
+
+@pytest.mark.parametrize("heard, stops", [
+    ("Computer, stomptic titting.", True),   # what the recogniser really made of "stop dictating"
+    ("Computer stop the taking", True),
+    ("computer, start the music", False),
+    ("I told the computer stomptic titting", False),   # no wake word in front: it is text
+])
+def test_a_misheard_stop_phrase_still_ends_dictation(commands, heard, stops):
+    assert commands["dictate"]._split_stop(heard)[1] is stops

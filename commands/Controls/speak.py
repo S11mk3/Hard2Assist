@@ -18,16 +18,16 @@ Speak turns my voice back on after "quiet".
 kept for next time.
 Everything I say is written here either way -- this only decides whether
 it is also read out loud.
-The voice is the one built into Windows, so it works offline and nothing
-you hear ever leaves this PC.\
+The voice runs on this PC, so it works offline and nothing you hear ever
+leaves it. Pick a different one in the dock's settings.\
 """
 
-STEP = 2   # of SAPI's -10..10 rate scale
+STEP = 0.1   # of the voice's speed, where 1 is normal
 
 
 def run(argument=""):
     if not speech.available():
-        warn("I could not start a voice on this PC.")
+        warn("My voice isn't working on this PC.")
         return
     speech.set_enabled(True)
 
@@ -37,10 +37,10 @@ def run(argument=""):
         say("Speaking again")
         return
 
-    current = settings.get("voice_rate")
-    rate = max(-10, min(10, current + change))
-    if rate == current:
+    current = settings.get("speed")
+    speed = round(max(settings.SPEED[0], min(settings.SPEED[1], current + change)), 2)
+    if speed == current:
         say("That's as fast as I go." if change > 0 else "That's as slow as I go.")
         return
-    settings.set("voice_rate", rate)
+    settings.set("speed", speed)
     say("Speaking faster" if change > 0 else "Speaking slower")

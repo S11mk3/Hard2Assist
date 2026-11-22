@@ -39,7 +39,8 @@ def run():
     drives.sort(key=lambda entry: entry[0].upper() != system)   # Windows' own drive first
 
     drive, usage = drives[0]
-    say(f"{drive.rstrip(':')} drive has {round(usage.free / GB)} gigabytes free")
+    # "The C drive": the voice runs a bare "C drive" together into something else.
+    say(f"The {drive.rstrip(':')} drive has {round(usage.free / GB)} gigabytes free")
     for drive, usage in drives:
         detail(f"  {drive}  {usage.free / GB:.0f} GB free of {usage.total / GB:.0f} GB  "
                f"({usage.percent:.0f}% used)")
